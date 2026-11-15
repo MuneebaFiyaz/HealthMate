@@ -13,7 +13,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { getHealthRecords } from '../database/database';
 import { useTheme } from '../context/ThemeContext';
 
-const STEP_GOAL = 10000;
+// Daily goals used on the dashboard.
+const STEP_GOAL = 2500;
 const WATER_GOAL = 2500;
 const CALORIE_GOAL = 500;
 
@@ -24,6 +25,15 @@ function getDateKey(date) {
     String(date.getMonth() + 1).padStart(2, '0'),
     String(date.getDate()).padStart(2, '0'),
   ].join('-');
+}
+
+// Display large step counts in a shorter format.
+function formatSteps(steps) {
+  if (steps >= 1000) {
+    return `${(steps / 1000).toFixed(1)}k`;
+  }
+
+  return steps.toString();
 }
 
 export default function HomeScreen() {
@@ -94,7 +104,7 @@ export default function HomeScreen() {
             lastSevenDays.push({
               date: dateKey,
               label: date.toLocaleDateString('en', {
-                weekday: 'narrow',
+                weekday: 'short',
               }),
               steps: daySteps,
               isToday: dateKey === todayKey,
@@ -144,6 +154,17 @@ export default function HomeScreen() {
     0
   );
 
+  // Choose an encouragement message based on today's activity.
+  let encouragementMessage;
+
+  if (remainingSteps === 0) {
+    encouragementMessage = "You've reached your daily step goal. Great work!";
+  } else if (todayData.steps === 0) {
+    encouragementMessage = 'Record your first activity and start your day.';
+  } else {
+    encouragementMessage = `Just ${remainingSteps.toLocaleString()} steps to your daily goal.`;
+  }
+
   return (
     <View style={styles.container}>
       <ScrollView
@@ -154,6 +175,9 @@ export default function HomeScreen() {
         <View style={styles.header}>
           <Text style={styles.brand}>HEALTHMATE</Text>
           <Text style={styles.title}>Your daily balance</Text>
+          <Text style={styles.subtitle}>
+            Keep track of your daily activity.
+          </Text>
         </View>
 
         {/* Today's date */}
@@ -187,7 +211,7 @@ export default function HomeScreen() {
             </Text>
 
             <Text style={styles.stepsGoal}>
-              of 10,000 daily steps
+              of {STEP_GOAL.toLocaleString()} daily steps
             </Text>
           </View>
 
@@ -222,7 +246,7 @@ export default function HomeScreen() {
             </View>
 
             <Text style={styles.activityGoal}>
-              of 2,500 ml
+              of {WATER_GOAL.toLocaleString()} ml
             </Text>
 
             <View style={styles.smallProgressBackground}>
@@ -257,7 +281,7 @@ export default function HomeScreen() {
             </View>
 
             <Text style={styles.activityGoal}>
-              of 500 kcal
+              of {CALORIE_GOAL} kcal
             </Text>
 
             <View style={styles.smallProgressBackground}>
@@ -280,7 +304,7 @@ export default function HomeScreen() {
               </Text>
 
               <Text style={styles.weekSubtitle}>
-                Daily steps · last 7 days
+                Daily steps · Last 7 days
               </Text>
             </View>
 
@@ -291,13 +315,16 @@ export default function HomeScreen() {
 
           <View style={styles.chart}>
             {weeklyData.map(day => {
-              const barHeight = Math.max(
-                (day.steps / highestDay) * 48,
-                7
-              );
+              const barHeight = day.steps > 0
+                ? Math.max((day.steps / highestDay) * 55, 5)
+                : 2;
 
               return (
                 <View key={day.date} style={styles.chartColumn}>
+                  <Text style={styles.chartValue}>
+                    {formatSteps(day.steps)}
+                  </Text>
+
                   <View
                     style={[
                       styles.chartBar,
@@ -342,9 +369,7 @@ export default function HomeScreen() {
             </Text>
 
             <Text style={styles.messageDescription}>
-              {remainingSteps === 0
-                ? "You've reached your daily step goal. Great work!"
-                : `Just ${remainingSteps.toLocaleString()} steps to your daily goal.`}
+              {encouragementMessage}
             </Text>
 
             <Text style={styles.messageHint}>
@@ -365,9 +390,7 @@ const createStyles = (theme, isDarkMode) => StyleSheet.create({
   },
 
   scrollContent: {
-    flexGrow: 1,
-    justifyContent: 'space-between',
-    paddingBottom: 12,
+    paddingBottom: 25,
   },
 
   header: {
@@ -389,12 +412,18 @@ const createStyles = (theme, isDarkMode) => StyleSheet.create({
     marginTop: 7,
   },
 
+  subtitle: {
+    fontSize: 13,
+    color: theme.secondaryText,
+    marginTop: 5,
+  },
+
   dateRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginHorizontal: 22,
-    marginTop: 16,
+    marginTop: 17,
     marginBottom: 15,
   },
 
@@ -408,7 +437,7 @@ const createStyles = (theme, isDarkMode) => StyleSheet.create({
     marginHorizontal: 16,
     padding: 20,
     borderRadius: 19,
-    minHeight: 120,
+    minHeight: 125,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -593,6 +622,12 @@ const createStyles = (theme, isDarkMode) => StyleSheet.create({
     justifyContent: 'flex-end',
   },
 
+  chartValue: {
+    fontSize: 9,
+    color: theme.secondaryText,
+    marginBottom: 5,
+  },
+
   chartBar: {
     width: 17,
     borderRadius: 6,
@@ -609,45 +644,47 @@ const createStyles = (theme, isDarkMode) => StyleSheet.create({
     fontWeight: 'bold',
   },
 
-  messageCard: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    backgroundColor: isDarkMode ? theme.card : '#EAF0DF',
-    marginHorizontal: 16,
-    marginTop: 13,
-    padding: 14,
-    borderRadius: 17,
-  },
+ 
+messageCard: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  backgroundColor: isDarkMode ? theme.card : '#EAF0DF',
+  marginHorizontal: 16,
+  marginTop: 10,
+  paddingHorizontal: 12,
+  paddingVertical: 9,
+  borderRadius: 13,
+},
 
-  messageIcon: {
-    width: 25,
-    height: 25,
-    borderRadius: 8,
-    backgroundColor: '#D5EBAA',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 10,
-  },
+messageIcon: {
+  width: 22,
+  height: 22,
+  borderRadius: 7,
+  backgroundColor: '#D5EBAA',
+  alignItems: 'center',
+  justifyContent: 'center',
+  marginRight: 9,
+},
 
-  messageContent: {
-    flex: 1,
-  },
+messageContent: {
+  flex: 1,
+},
 
-  messageTitle: {
-    fontSize: 13,
-    fontWeight: 'bold',
-    color: theme.text,
-  },
+messageTitle: {
+  fontSize: 12,
+  fontWeight: 'bold',
+  color: theme.text,
+},
 
-  messageDescription: {
-    fontSize: 12,
-    color: theme.secondaryText,
-    marginTop: 5,
-  },
+messageDescription: {
+  fontSize: 11,
+  color: theme.secondaryText,
+  marginTop: 3,
+},
 
-  messageHint: {
-    fontSize: 11,
-    color: theme.secondaryText,
-    marginTop: 2,
-  },
+messageHint: {
+  fontSize: 10,
+  color: theme.secondaryText,
+  marginTop: 1,
+},
 });

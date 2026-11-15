@@ -72,9 +72,11 @@ export default function HistoryScreen() {
     try {
       const savedRecords = await getHealthRecords(database);
       setRecords(savedRecords);
+      return true;
     } catch (error) {
       console.error('Error loading health records:', error);
       showMessage('Error', 'Could not load health records.', 'error');
+      return false;
     }
   };
 
@@ -91,7 +93,7 @@ export default function HistoryScreen() {
     setIsRefreshing(false);
   };
 
-  // Filter records using the date entered by the user.
+  // Filter records using the selected date.
   const filteredRecords = isSearching
     ? records.filter(record => record.date === searchDate.trim())
     : records;
@@ -209,13 +211,16 @@ export default function HistoryScreen() {
       });
 
       cancelEdit();
-      await loadRecords();
 
-      showMessage(
-        'Record Updated!',
-        'Your health record has been updated successfully.',
-        'success'
-      );
+      const loaded = await loadRecords();
+
+      if (loaded) {
+        showMessage(
+          'Record Updated!',
+          'Your health record has been updated successfully.',
+          'success'
+        );
+      }
     } catch (error) {
       console.error('Error updating health record:', error);
 
@@ -243,13 +248,15 @@ export default function HistoryScreen() {
             cancelEdit();
           }
 
-          await loadRecords();
+          const loaded = await loadRecords();
 
-          showMessage(
-            'Record Deleted!',
-            'The health record has been deleted successfully.',
-            'success'
-          );
+          if (loaded) {
+            showMessage(
+              'Record Deleted!',
+              'The health record has been deleted successfully.',
+              'success'
+            );
+          }
         } catch (error) {
           console.error('Error deleting health record:', error);
 
@@ -276,30 +283,30 @@ export default function HistoryScreen() {
           />
         }
       >
-        {/* Screen header */}
-        <Text style={styles.brand}>HEALTHMATE</Text>
+        {/* Header */}
+        <View style={styles.header}>
+          <Text style={styles.brand}>HEALTHMATE</Text>
+          <Text style={styles.title}>Health History</Text>
+          <Text style={styles.subtitle}>
+            Your activity records in one place.
+          </Text>
+        </View>
 
-        <Text style={styles.title}>Health History</Text>
-
-        <Text style={styles.subtitle}>
-          View and manage your previous health records.
-        </Text>
-
-        {/* Search records by date */}
+        {/* Date search */}
         <View style={styles.searchCard}>
-          <View style={styles.searchHeader}>
-            <View style={styles.searchIcon}>
+          <View style={styles.sectionHeading}>
+            <View style={styles.headingIcon}>
               <Ionicons
                 name="calendar-outline"
-                size={22}
+                size={20}
                 color={theme.primary}
               />
             </View>
 
-            <View>
-              <Text style={styles.searchTitle}>Search by Date</Text>
+            <View style={styles.headingText}>
+              <Text style={styles.searchTitle}>Find a Record</Text>
               <Text style={styles.searchDescription}>
-                Find records using a specific date.
+                Search using a specific date.
               </Text>
             </View>
           </View>
@@ -320,7 +327,7 @@ export default function HistoryScreen() {
               onPress={handleSearch}
               activeOpacity={0.8}
             >
-              <Ionicons name="search-outline" size={18} color="#FFFFFF" />
+              <Ionicons name="search-outline" size={17} color="#FFFFFF" />
               <Text style={styles.buttonText}>Search</Text>
             </TouchableOpacity>
 
@@ -329,7 +336,11 @@ export default function HistoryScreen() {
               onPress={clearSearch}
               activeOpacity={0.8}
             >
-              <Ionicons name="refresh-outline" size={18} color={theme.text} />
+              <Ionicons
+                name="refresh-outline"
+                size={17}
+                color={theme.text}
+              />
               <Text style={styles.clearButtonText}>Show All</Text>
             </TouchableOpacity>
           </View>
@@ -337,21 +348,29 @@ export default function HistoryScreen() {
 
         {/* Records heading */}
         <View style={styles.resultHeader}>
-          <Text style={styles.resultText}>
-            {isSearching ? 'Search Results' : 'All Health Records'}
-          </Text>
+          <View>
+            <Text style={styles.resultTitle}>
+              {isSearching ? 'Search Results' : 'Saved Records'}
+            </Text>
+            <Text style={styles.resultSubtitle}>
+              Your previously recorded activities
+            </Text>
+          </View>
 
-          <Text style={styles.recordCount}>
-            {filteredRecords.length} {filteredRecords.length === 1 ? 'record' : 'records'}
-          </Text>
+          <View style={styles.countBadge}>
+            <Text style={styles.countText}>
+              {filteredRecords.length}
+            </Text>
+          </View>
         </View>
 
+        {/* Empty state */}
         {filteredRecords.length === 0 ? (
           <View style={styles.emptyCard}>
             <View style={styles.emptyIcon}>
               <Ionicons
                 name="folder-open-outline"
-                size={35}
+                size={30}
                 color={theme.primary}
               />
             </View>
@@ -371,21 +390,26 @@ export default function HistoryScreen() {
               <View style={styles.recordHeader}>
                 <View style={styles.recordDateIcon}>
                   <Ionicons
-                    name="calendar"
-                    size={19}
+                    name="calendar-outline"
+                    size={18}
                     color={theme.primary}
                   />
                 </View>
 
-                <Text style={styles.date}>{record.date}</Text>
+                <View style={styles.dateContent}>
+                  <Text style={styles.dateLabel}>RECORD DATE</Text>
+                  <Text style={styles.date}>{record.date}</Text>
+                </View>
 
                 {editingId === record.id && (
-                  <Text style={styles.editingLabel}>EDITING</Text>
+                  <View style={styles.editingBadge}>
+                    <Text style={styles.editingText}>EDITING</Text>
+                  </View>
                 )}
               </View>
 
               {editingId === record.id ? (
-                <View>
+                <View style={styles.editForm}>
                   <Text style={styles.label}>Steps</Text>
                   <TextInput
                     style={styles.input}
@@ -424,7 +448,7 @@ export default function HistoryScreen() {
                     >
                       <Ionicons
                         name="checkmark-outline"
-                        size={18}
+                        size={17}
                         color="#FFFFFF"
                       />
                       <Text style={styles.buttonText}>Save Changes</Text>
@@ -441,45 +465,56 @@ export default function HistoryScreen() {
                 </View>
               ) : (
                 <>
-                  {/* Record information */}
-                  <View style={styles.recordRow}>
-                    <View style={styles.metricInfo}>
+                  {/* Steps */}
+                  <View style={styles.metricRow}>
+                    <View style={styles.metricIconSteps}>
                       <Ionicons
                         name="footsteps-outline"
                         size={19}
                         color={theme.primary}
                       />
-                      <Text style={styles.label}>Steps</Text>
                     </View>
-                    <Text style={styles.value}>{record.steps}</Text>
+
+                    <Text style={styles.metricLabel}>Steps</Text>
+                    <Text style={styles.metricValue}>
+                      {record.steps.toLocaleString()}
+                    </Text>
                   </View>
 
-                  <View style={styles.recordRow}>
-                    <View style={styles.metricInfo}>
+                  {/* Calories */}
+                  <View style={styles.metricRow}>
+                    <View style={styles.metricIconCalories}>
                       <Ionicons
                         name="flame-outline"
                         size={19}
                         color="#D94D56"
                       />
-                      <Text style={styles.label}>Calories Burned</Text>
                     </View>
-                    <Text style={styles.value}>{record.calories} kcal</Text>
+
+                    <Text style={styles.metricLabel}>Calories</Text>
+                    <Text style={styles.metricValue}>
+                      {record.calories.toLocaleString()} kcal
+                    </Text>
                   </View>
 
-                  <View style={styles.recordRow}>
-                    <View style={styles.metricInfo}>
+                  {/* Water */}
+                  <View style={styles.metricRow}>
+                    <View style={styles.metricIconWater}>
                       <Ionicons
                         name="water-outline"
                         size={19}
                         color="#278BCB"
                       />
-                      <Text style={styles.label}>Water Intake</Text>
                     </View>
-                    <Text style={styles.value}>{record.water} ml</Text>
+
+                    <Text style={styles.metricLabel}>Water intake</Text>
+                    <Text style={styles.metricValue}>
+                      {record.water.toLocaleString()} ml
+                    </Text>
                   </View>
 
                   {/* Record actions */}
-                  <View style={styles.buttonRow}>
+                  <View style={styles.actionRow}>
                     <TouchableOpacity
                       style={styles.editButton}
                       onPress={() => handleEdit(record)}
@@ -487,10 +522,10 @@ export default function HistoryScreen() {
                     >
                       <Ionicons
                         name="create-outline"
-                        size={18}
+                        size={17}
                         color="#FFFFFF"
                       />
-                      <Text style={styles.buttonText}>Edit Record</Text>
+                      <Text style={styles.buttonText}>Edit</Text>
                     </TouchableOpacity>
 
                     <TouchableOpacity
@@ -500,7 +535,7 @@ export default function HistoryScreen() {
                     >
                       <Ionicons
                         name="trash-outline"
-                        size={18}
+                        size={17}
                         color="#FFFFFF"
                       />
                       <Text style={styles.buttonText}>Delete</Text>
@@ -527,7 +562,7 @@ export default function HistoryScreen() {
   );
 }
 
-// Styles use the colours from the selected theme.
+// Styles use the selected app theme.
 const createStyles = (theme, isDarkMode) =>
   StyleSheet.create({
     container: {
@@ -536,69 +571,75 @@ const createStyles = (theme, isDarkMode) =>
     },
 
     scrollContent: {
-      paddingHorizontal: 20,
-      paddingTop: 35,
-      paddingBottom: 30,
+      paddingHorizontal: 18,
+      paddingTop: 30,
+      paddingBottom: 25,
+    },
+
+    header: {
+      marginBottom: 20,
     },
 
     brand: {
-      fontSize: 12,
+      fontSize: 11,
       fontWeight: 'bold',
       letterSpacing: 2,
-      color: theme.primary,
+      color: isDarkMode ? '#8DC9AE' : '#21664F',
     },
 
     title: {
-      fontSize: 29,
+      fontSize: 27,
       fontWeight: 'bold',
       color: theme.text,
-      marginTop: 9,
+      marginTop: 7,
     },
 
     subtitle: {
-      fontSize: 15,
+      fontSize: 13,
       color: theme.secondaryText,
-      lineHeight: 22,
-      marginTop: 7,
-      marginBottom: 22,
+      marginTop: 5,
     },
 
     searchCard: {
       backgroundColor: theme.card,
-      padding: 17,
-      borderRadius: 17,
-      marginBottom: 24,
+      padding: 16,
+      borderRadius: 18,
+      marginBottom: 23,
       borderWidth: 1,
       borderColor: theme.border,
       elevation: isDarkMode ? 0 : 2,
     },
 
-    searchHeader: {
+    sectionHeading: {
       flexDirection: 'row',
       alignItems: 'center',
-      marginBottom: 16,
+      marginBottom: 15,
     },
 
-    searchIcon: {
-      width: 45,
-      height: 45,
-      borderRadius: 13,
-      backgroundColor: isDarkMode ? '#303030' : '#E8F0E8',
+    headingIcon: {
+      width: 40,
+      height: 40,
+      borderRadius: 12,
+      backgroundColor: isDarkMode ? '#303A34' : '#E8F0E8',
       alignItems: 'center',
       justifyContent: 'center',
-      marginRight: 12,
+      marginRight: 11,
+    },
+
+    headingText: {
+      flex: 1,
     },
 
     searchTitle: {
-      fontSize: 16,
+      fontSize: 15,
       fontWeight: 'bold',
       color: theme.text,
     },
 
     searchDescription: {
-      fontSize: 12,
+      fontSize: 11,
       color: theme.secondaryText,
-      marginTop: 4,
+      marginTop: 3,
     },
 
     searchInput: {
@@ -606,25 +647,25 @@ const createStyles = (theme, isDarkMode) =>
       borderWidth: 1,
       borderColor: theme.border,
       borderRadius: 11,
-      paddingHorizontal: 14,
-      paddingVertical: 13,
-      fontSize: 15,
+      paddingHorizontal: 13,
+      paddingVertical: 12,
+      fontSize: 14,
       color: theme.text,
     },
 
     buttonRow: {
       flexDirection: 'row',
-      gap: 10,
-      marginTop: 14,
+      gap: 9,
+      marginTop: 12,
     },
 
     searchButton: {
       flex: 1,
       flexDirection: 'row',
-      gap: 7,
+      gap: 6,
       backgroundColor: theme.primary,
-      padding: 13,
-      borderRadius: 11,
+      paddingVertical: 12,
+      borderRadius: 10,
       alignItems: 'center',
       justifyContent: 'center',
     },
@@ -632,25 +673,25 @@ const createStyles = (theme, isDarkMode) =>
     clearButton: {
       flex: 1,
       flexDirection: 'row',
-      gap: 7,
+      gap: 6,
       backgroundColor: theme.input,
       borderWidth: 1,
       borderColor: theme.border,
-      padding: 13,
-      borderRadius: 11,
+      paddingVertical: 12,
+      borderRadius: 10,
       alignItems: 'center',
       justifyContent: 'center',
     },
 
     buttonText: {
       color: '#FFFFFF',
-      fontSize: 13,
+      fontSize: 12,
       fontWeight: 'bold',
     },
 
     clearButtonText: {
       color: theme.text,
-      fontSize: 13,
+      fontSize: 12,
       fontWeight: 'bold',
     },
 
@@ -658,23 +699,40 @@ const createStyles = (theme, isDarkMode) =>
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
-      marginBottom: 14,
+      marginBottom: 13,
     },
 
-    resultText: {
+    resultTitle: {
       fontSize: 17,
       fontWeight: 'bold',
       color: theme.text,
     },
 
-    recordCount: {
-      fontSize: 12,
+    resultSubtitle: {
+      fontSize: 11,
       color: theme.secondaryText,
+      marginTop: 3,
+    },
+
+    countBadge: {
+      minWidth: 32,
+      height: 32,
+      borderRadius: 10,
+      backgroundColor: isDarkMode ? '#303A34' : '#E4EDE2',
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingHorizontal: 8,
+    },
+
+    countText: {
+      fontSize: 13,
+      fontWeight: 'bold',
+      color: theme.primary,
     },
 
     emptyCard: {
       backgroundColor: theme.card,
-      padding: 28,
+      padding: 24,
       borderRadius: 17,
       alignItems: 'center',
       borderWidth: 1,
@@ -682,34 +740,34 @@ const createStyles = (theme, isDarkMode) =>
     },
 
     emptyIcon: {
-      width: 65,
-      height: 65,
-      borderRadius: 33,
-      backgroundColor: isDarkMode ? '#303030' : '#E8F0E8',
+      width: 58,
+      height: 58,
+      borderRadius: 29,
+      backgroundColor: isDarkMode ? '#303A34' : '#E8F0E8',
       alignItems: 'center',
       justifyContent: 'center',
-      marginBottom: 14,
+      marginBottom: 12,
     },
 
     emptyTitle: {
-      fontSize: 17,
+      fontSize: 16,
       fontWeight: 'bold',
       color: theme.text,
     },
 
     emptyText: {
-      fontSize: 14,
+      fontSize: 12,
       color: theme.secondaryText,
       textAlign: 'center',
-      lineHeight: 21,
-      marginTop: 8,
+      lineHeight: 19,
+      marginTop: 7,
     },
 
     recordCard: {
       backgroundColor: theme.card,
-      padding: 17,
+      padding: 15,
       borderRadius: 17,
-      marginBottom: 15,
+      marginBottom: 13,
       borderWidth: 1,
       borderColor: theme.border,
       elevation: isDarkMode ? 0 : 2,
@@ -718,8 +776,8 @@ const createStyles = (theme, isDarkMode) =>
     recordHeader: {
       flexDirection: 'row',
       alignItems: 'center',
-      marginBottom: 17,
-      paddingBottom: 13,
+      marginBottom: 13,
+      paddingBottom: 12,
       borderBottomWidth: 1,
       borderBottomColor: theme.border,
     },
@@ -727,69 +785,108 @@ const createStyles = (theme, isDarkMode) =>
     recordDateIcon: {
       width: 36,
       height: 36,
-      borderRadius: 10,
-      backgroundColor: isDarkMode ? '#303030' : '#E8F0E8',
+      borderRadius: 11,
+      backgroundColor: isDarkMode ? '#303A34' : '#E8F0E8',
       alignItems: 'center',
       justifyContent: 'center',
       marginRight: 10,
     },
 
-    date: {
+    dateContent: {
       flex: 1,
-      fontSize: 16,
-      fontWeight: 'bold',
-      color: theme.primary,
     },
 
-    editingLabel: {
-      fontSize: 10,
+    dateLabel: {
+      fontSize: 9,
+      letterSpacing: 1,
+      color: theme.secondaryText,
+      fontWeight: 'bold',
+    },
+
+    date: {
+      fontSize: 14,
+      fontWeight: 'bold',
+      color: theme.text,
+      marginTop: 3,
+    },
+
+    editingBadge: {
+      backgroundColor: isDarkMode ? '#303A34' : '#E4EDE2',
+      paddingHorizontal: 9,
+      paddingVertical: 5,
+      borderRadius: 7,
+    },
+
+    editingText: {
+      fontSize: 9,
       fontWeight: 'bold',
       color: theme.primary,
       letterSpacing: 1,
     },
 
-    recordRow: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      marginBottom: 16,
-    },
-
-    metricInfo: {
+    metricRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 10,
+      marginBottom: 12,
     },
 
-    label: {
-      fontSize: 14,
+    metricIconSteps: {
+      width: 33,
+      height: 33,
+      borderRadius: 10,
+      backgroundColor: isDarkMode ? '#303A34' : '#E8F0E8',
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginRight: 10,
+    },
+
+    metricIconCalories: {
+      width: 33,
+      height: 33,
+      borderRadius: 10,
+      backgroundColor: isDarkMode ? '#382C2E' : '#FBECEE',
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginRight: 10,
+    },
+
+    metricIconWater: {
+      width: 33,
+      height: 33,
+      borderRadius: 10,
+      backgroundColor: isDarkMode ? '#293641' : '#E8F2FA',
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginRight: 10,
+    },
+
+    metricLabel: {
+      flex: 1,
+      fontSize: 13,
       color: theme.secondaryText,
     },
 
-    value: {
-      fontSize: 14,
+    metricValue: {
+      fontSize: 13,
       fontWeight: 'bold',
       color: theme.text,
     },
 
-    input: {
-      backgroundColor: theme.input,
-      borderWidth: 1,
-      borderColor: theme.border,
-      borderRadius: 10,
-      padding: 13,
-      marginTop: 7,
-      marginBottom: 15,
-      fontSize: 15,
-      color: theme.text,
+    actionRow: {
+      flexDirection: 'row',
+      gap: 9,
+      marginTop: 5,
+      paddingTop: 12,
+      borderTopWidth: 1,
+      borderTopColor: theme.border,
     },
 
     editButton: {
       flex: 1,
       flexDirection: 'row',
-      gap: 7,
+      gap: 6,
       backgroundColor: theme.primary,
-      padding: 13,
+      paddingVertical: 11,
       borderRadius: 10,
       alignItems: 'center',
       justifyContent: 'center',
@@ -798,20 +895,44 @@ const createStyles = (theme, isDarkMode) =>
     deleteButton: {
       flex: 1,
       flexDirection: 'row',
-      gap: 7,
+      gap: 6,
       backgroundColor: '#D9534F',
-      padding: 13,
+      paddingVertical: 11,
       borderRadius: 10,
       alignItems: 'center',
       justifyContent: 'center',
     },
 
+    editForm: {
+      paddingTop: 3,
+    },
+
+    label: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: theme.text,
+      marginBottom: 2,
+    },
+
+    input: {
+      backgroundColor: theme.input,
+      borderWidth: 1,
+      borderColor: theme.border,
+      borderRadius: 10,
+      paddingHorizontal: 12,
+      paddingVertical: 11,
+      marginTop: 5,
+      marginBottom: 13,
+      fontSize: 14,
+      color: theme.text,
+    },
+
     saveButton: {
       flex: 1,
       flexDirection: 'row',
-      gap: 7,
+      gap: 6,
       backgroundColor: theme.primary,
-      padding: 13,
+      padding: 12,
       borderRadius: 10,
       alignItems: 'center',
       justifyContent: 'center',
@@ -820,7 +941,7 @@ const createStyles = (theme, isDarkMode) =>
     cancelButton: {
       flex: 1,
       backgroundColor: '#718096',
-      padding: 13,
+      padding: 12,
       borderRadius: 10,
       alignItems: 'center',
       justifyContent: 'center',
