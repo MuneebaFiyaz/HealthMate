@@ -15,12 +15,22 @@ import { useTheme } from '../context/ThemeContext';
 
 const STEP_GOAL = 10000;
 const WATER_GOAL = 2500;
+const CALORIE_GOAL = 500;
+
+// Convert a date into YYYY-MM-DD format.
+function getDateKey(date) {
+  return [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, '0'),
+    String(date.getDate()).padStart(2, '0'),
+  ].join('-');
+}
 
 export default function HomeScreen() {
   const database = useSQLiteContext();
-  const { theme } = useTheme();
+  const { theme, isDarkMode } = useTheme();
 
-  const styles = createStyles(theme);
+  const styles = createStyles(theme, isDarkMode);
 
   const [todayData, setTodayData] = useState({
     steps: 0,
@@ -28,25 +38,32 @@ export default function HomeScreen() {
     water: 0,
   });
 
-  // Load today's records whenever the Home screen is opened.
+  const [weeklyData, setWeeklyData] = useState([]);
+  const [todayDate, setTodayDate] = useState('');
+
+  // Load dashboard records whenever Home is opened.
   useFocusEffect(
     useCallback(() => {
-      async function loadTodayData() {
+      async function loadDashboardData() {
         try {
           const records = await getHealthRecords(database);
 
           const today = new Date();
-          const todayDate = [
-            today.getFullYear(),
-            String(today.getMonth() + 1).padStart(2, '0'),
-            String(today.getDate()).padStart(2, '0'),
-          ].join('-');
+          const todayKey = getDateKey(today);
 
-          const todaysRecords = records.filter(
-            record => record.date === todayDate
+          setTodayDate(
+            today.toLocaleDateString('en-GB', {
+              day: 'numeric',
+              month: 'long',
+              year: 'numeric',
+            })
           );
 
-          // Add together all records saved for today.
+          // Calculate today's totals.
+          const todaysRecords = records.filter(
+            record => record.date === todayKey
+          );
+
           const totals = todaysRecords.reduce(
             (result, record) => ({
               steps: result.steps + record.steps,
@@ -57,16 +74,44 @@ export default function HomeScreen() {
           );
 
           setTodayData(totals);
+
+          // Prepare the last seven days for the chart.
+          const lastSevenDays = [];
+
+          for (let i = 6; i >= 0; i--) {
+            const date = new Date(
+              today.getFullYear(),
+              today.getMonth(),
+              today.getDate() - i
+            );
+
+            const dateKey = getDateKey(date);
+
+            const daySteps = records
+              .filter(record => record.date === dateKey)
+              .reduce((total, record) => total + record.steps, 0);
+
+            lastSevenDays.push({
+              date: dateKey,
+              label: date.toLocaleDateString('en', {
+                weekday: 'narrow',
+              }),
+              steps: daySteps,
+              isToday: dateKey === todayKey,
+            });
+          }
+
+          setWeeklyData(lastSevenDays);
         } catch (error) {
           console.error('Error loading dashboard data:', error);
         }
       }
 
-      loadTodayData();
+      loadDashboardData();
     }, [database])
   );
 
-  // Calculate progress towards the daily goals.
+  // Calculate progress towards daily goals.
   const stepPercentage = Math.min(
     (todayData.steps / STEP_GOAL) * 100,
     100
@@ -77,339 +122,532 @@ export default function HomeScreen() {
     100
   );
 
+  const caloriePercentage = Math.min(
+    (todayData.calories / CALORIE_GOAL) * 100,
+    100
+  );
+
+  const weeklyTotal = weeklyData.reduce(
+    (total, day) => total + day.steps,
+    0
+  );
+
+  const weeklyAverage = Math.round(weeklyTotal / 7);
+
+  const highestDay = Math.max(
+    ...weeklyData.map(day => day.steps),
+    1
+  );
+
+  const remainingSteps = Math.max(
+    STEP_GOAL - todayData.steps,
+    0
+  );
+
   return (
     <View style={styles.container}>
-      <ScrollView showsVerticalScrollIndicator={false}>
-        {/* Header */}
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+      >
+        {/* Dashboard header */}
         <View style={styles.header}>
-          <View>
-            <Text style={styles.greeting}>Good day,</Text>
-            <Text style={styles.title}>HealthMate</Text>
-          </View>
-
-          <View style={styles.profile}>
-            <Text style={styles.profileText}>M</Text>
-          </View>
+          <Text style={styles.brand}>HEALTHMATE</Text>
+          <Text style={styles.title}>Your daily balance</Text>
         </View>
 
-        <Text style={styles.subtitle}>
-          Here's your daily health overview.
-        </Text>
+        {/* Today's date */}
+        <View style={styles.dateRow}>
+          <Text style={styles.dateText}>
+            Today, {todayDate}
+          </Text>
 
-        {/* Daily Summary */}
-        <Text style={styles.sectionTitle}>Today's Activity</Text>
+          <Ionicons
+            name="calendar-outline"
+            size={20}
+            color={theme.secondaryText}
+          />
+        </View>
 
-        <View style={styles.cardContainer}>
-          <View style={styles.card}>
-            <Ionicons
-              name="footsteps"
-              size={25}
-              color="#2878D0"
-              style={styles.cardIcon}
-            />
-            <Text style={styles.cardValue}>
+        {/* Main steps card */}
+        <View style={styles.stepsCard}>
+          <View style={styles.stepsInfo}>
+            <View style={styles.stepsLabelRow}>
+              <Ionicons
+                name="footsteps-outline"
+                size={21}
+                color="#D8E9B5"
+              />
+
+              <Text style={styles.stepsLabel}>Steps walked</Text>
+            </View>
+
+            <Text style={styles.stepsValue}>
               {todayData.steps.toLocaleString()}
             </Text>
-            <Text style={styles.cardLabel}>Steps</Text>
-            <Text style={styles.cardGoal}>Goal: 10,000</Text>
+
+            <Text style={styles.stepsGoal}>
+              of 10,000 daily steps
+            </Text>
           </View>
 
-          <View style={styles.card}>
+          <View style={styles.progressCircle}>
+            <Text style={styles.circlePercentage}>
+              {stepPercentage.toFixed(0)}%
+            </Text>
+
+            <Text style={styles.circleLabel}>of goal</Text>
+          </View>
+        </View>
+
+        {/* Water and calories cards */}
+        <View style={styles.activityRow}>
+          <View style={styles.waterCard}>
+            <View style={styles.activityTitleRow}>
+              <Ionicons
+                name="water-outline"
+                size={19}
+                color="#278BCB"
+              />
+
+              <Text style={styles.waterTitle}>Water intake</Text>
+            </View>
+
+            <View style={styles.valueRow}>
+              <Text style={styles.activityValue}>
+                {todayData.water.toLocaleString()}
+              </Text>
+
+              <Text style={styles.unit}>ml</Text>
+            </View>
+
+            <Text style={styles.activityGoal}>
+              of 2,500 ml
+            </Text>
+
+            <View style={styles.smallProgressBackground}>
+              <View
+                style={[
+                  styles.waterProgressFill,
+                  { width: `${waterPercentage}%` },
+                ]}
+              />
+            </View>
+          </View>
+
+          <View style={styles.calorieCard}>
+            <View style={styles.activityTitleRow}>
+              <Ionicons
+                name="flame-outline"
+                size={19}
+                color="#D94D56"
+              />
+
+              <Text style={styles.calorieTitle}>
+                Calories burned
+              </Text>
+            </View>
+
+            <View style={styles.valueRow}>
+              <Text style={styles.activityValue}>
+                {todayData.calories.toLocaleString()}
+              </Text>
+
+              <Text style={styles.unit}>kcal</Text>
+            </View>
+
+            <Text style={styles.activityGoal}>
+              of 500 kcal
+            </Text>
+
+            <View style={styles.smallProgressBackground}>
+              <View
+                style={[
+                  styles.calorieProgressFill,
+                  { width: `${caloriePercentage}%` },
+                ]}
+              />
+            </View>
+          </View>
+        </View>
+
+        {/* Weekly progress chart */}
+        <View style={styles.weekCard}>
+          <View style={styles.weekHeader}>
+            <View>
+              <Text style={styles.weekTitle}>
+                A week of progress
+              </Text>
+
+              <Text style={styles.weekSubtitle}>
+                Daily steps · last 7 days
+              </Text>
+            </View>
+
+            <Text style={styles.weekAverage}>
+              {weeklyAverage.toLocaleString()} avg
+            </Text>
+          </View>
+
+          <View style={styles.chart}>
+            {weeklyData.map(day => {
+              const barHeight = Math.max(
+                (day.steps / highestDay) * 48,
+                7
+              );
+
+              return (
+                <View key={day.date} style={styles.chartColumn}>
+                  <View
+                    style={[
+                      styles.chartBar,
+                      {
+                        height: barHeight,
+                        backgroundColor: day.isToday
+                          ? '#21664F'
+                          : isDarkMode
+                            ? '#555555'
+                            : '#DCE9DE',
+                      },
+                    ]}
+                  />
+
+                  <Text
+                    style={[
+                      styles.chartLabel,
+                      day.isToday && styles.todayChartLabel,
+                    ]}
+                  >
+                    {day.label}
+                  </Text>
+                </View>
+              );
+            })}
+          </View>
+        </View>
+
+        {/* Daily encouragement */}
+        <View style={styles.messageCard}>
+          <View style={styles.messageIcon}>
             <Ionicons
-              name="flame"
-              size={25}
-              color="#E58A45"
-              style={styles.cardIcon}
-            />
-            <Text style={styles.cardValue}>
-              {todayData.calories.toLocaleString()}
-            </Text>
-            <Text style={styles.cardLabel}>Calories</Text>
-            <Text style={styles.cardGoal}>kcal burned</Text>
-          </View>
-        </View>
-
-        {/* Water Intake */}
-        <View style={styles.waterCard}>
-          <View>
-            <Text style={styles.waterTitle}>
-              <Ionicons name="water" size={17} color="#2878D0" /> Water Intake
-            </Text>
-
-            <Text style={styles.waterValue}>
-              {todayData.water.toLocaleString()} ml
-            </Text>
-
-            <Text style={styles.cardGoal}>
-              Daily goal: 2,500 ml
-            </Text>
-          </View>
-
-          <View style={styles.waterProgress}>
-            <View
-              style={[
-                styles.waterProgressFill,
-                { width: `${waterPercentage}%` },
-              ]}
-            />
-          </View>
-        </View>
-
-        {/* Daily Goals */}
-        <Text style={styles.sectionTitle}>Daily Goals</Text>
-
-        <View style={styles.goalCard}>
-          <View style={styles.goalHeader}>
-            <Text style={styles.goalName}>Step Goal</Text>
-            <Text style={styles.goalPercentage}>
-              {stepPercentage.toFixed(1)}%
-            </Text>
-          </View>
-
-          <View style={styles.progressBackground}>
-            <View
-              style={[
-                styles.progressFill,
-                { width: `${stepPercentage}%` },
-              ]}
+              name="checkmark"
+              size={19}
+              color="#21664F"
             />
           </View>
 
-          <View style={styles.goalHeader}>
-            <Text style={styles.goalName}>Water Goal</Text>
-            <Text style={styles.goalPercentage}>
-              {waterPercentage.toFixed(1)}%
+          <View style={styles.messageContent}>
+            <Text style={styles.messageTitle}>
+              Every step adds up
+            </Text>
+
+            <Text style={styles.messageDescription}>
+              {remainingSteps === 0
+                ? "You've reached your daily step goal. Great work!"
+                : `Just ${remainingSteps.toLocaleString()} steps to your daily goal.`}
+            </Text>
+
+            <Text style={styles.messageHint}>
+              A short walk is a great next step.
             </Text>
           </View>
-
-          <View style={styles.progressBackground}>
-            <View
-              style={[
-                styles.progressFill,
-                { width: `${waterPercentage}%` },
-              ]}
-            />
-          </View>
-        </View>
-
-        {/* Quick Access */}
-        <Text style={styles.sectionTitle}>Quick Access</Text>
-
-        <View style={styles.quickCard}>
-          <Text style={styles.quickTitle}>
-            Keep track of your day
-          </Text>
-
-          <Text style={styles.quickDescription}>
-            Add your daily health records and monitor your progress.
-          </Text>
-
-          <Text style={styles.quickAction}>
-            + Add Health Record
-          </Text>
         </View>
       </ScrollView>
     </View>
   );
 }
 
-// Colours are taken from the selected theme.
-const createStyles = (theme) => StyleSheet.create({
+// Styles use the selected app theme.
+const createStyles = (theme, isDarkMode) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: theme.background,
   },
 
-  header: {
-    flexDirection: 'row',
+  scrollContent: {
+    flexGrow: 1,
     justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 22,
-    paddingTop: 55,
+    paddingBottom: 12,
   },
 
-  greeting: {
-    fontSize: 15,
-    color: theme.secondaryText,
+  header: {
+    paddingHorizontal: 22,
+    paddingTop: 35,
+  },
+
+  brand: {
+    fontSize: 12,
+    fontWeight: 'bold',
+    letterSpacing: 2,
+    color: isDarkMode ? '#8DC9AE' : '#21664F',
   },
 
   title: {
-    fontSize: 27,
+    fontSize: 25,
     fontWeight: 'bold',
     color: theme.text,
-    marginTop: 4,
-  },
-
-  subtitle: {
-    fontSize: 14,
-    color: theme.secondaryText,
-    marginHorizontal: 22,
-    marginTop: 12,
-    marginBottom: 25,
-  },
-
-  profile: {
-    width: 45,
-    height: 45,
-    borderRadius: 25,
-    backgroundColor: theme.input,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-
-  profileText: {
-    fontSize: 19,
-    fontWeight: 'bold',
-    color: theme.primary,
-  },
-
-  sectionTitle: {
-    fontSize: 19,
-    fontWeight: 'bold',
-    color: theme.text,
-    marginHorizontal: 22,
-    marginBottom: 14,
-  },
-
-  cardContainer: {
-    flexDirection: 'row',
-    paddingHorizontal: 16,
-    gap: 12,
-    marginBottom: 15,
-  },
-
-  card: {
-    flex: 1,
-    backgroundColor: theme.card,
-    padding: 17,
-    borderRadius: 18,
-    elevation: 2,
-  },
-
-  cardIcon: {
-    marginBottom: 12,
-  },
-
-  cardValue: {
-    fontSize: 23,
-    fontWeight: 'bold',
-    color: theme.text,
-  },
-
-  cardLabel: {
-    fontSize: 14,
-    color: theme.secondaryText,
-    marginTop: 4,
-  },
-
-  cardGoal: {
-    fontSize: 12,
-    color: theme.secondaryText,
     marginTop: 7,
   },
 
-  waterCard: {
-    backgroundColor: theme.card,
+  dateRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginHorizontal: 22,
+    marginTop: 16,
+    marginBottom: 15,
+  },
+
+  dateText: {
+    fontSize: 14,
+    color: theme.secondaryText,
+  },
+
+  stepsCard: {
+    backgroundColor: '#21664F',
     marginHorizontal: 16,
-    marginBottom: 25,
-    padding: 18,
-    borderRadius: 18,
-    elevation: 2,
+    padding: 20,
+    borderRadius: 19,
+    minHeight: 120,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+
+  stepsInfo: {
+    flex: 1,
+  },
+
+  stepsLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 9,
+  },
+
+  stepsLabel: {
+    fontSize: 14,
+    color: '#FFFFFF',
+  },
+
+  stepsValue: {
+    fontSize: 34,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+    marginTop: 10,
+  },
+
+  stepsGoal: {
+    fontSize: 12,
+    color: '#D6E7DC',
+    marginTop: 3,
+  },
+
+  progressCircle: {
+    width: 74,
+    height: 74,
+    borderRadius: 37,
+    borderWidth: 5,
+    borderColor: '#C8E3A5',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 10,
+  },
+
+  circlePercentage: {
+    fontSize: 19,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+  },
+
+  circleLabel: {
+    fontSize: 10,
+    color: '#D6E7DC',
+  },
+
+  activityRow: {
+    flexDirection: 'row',
+    marginHorizontal: 16,
+    marginTop: 13,
+    gap: 10,
+  },
+
+  waterCard: {
+    flex: 1,
+    backgroundColor: isDarkMode ? theme.card : '#E8F2FA',
+    padding: 13,
+    borderRadius: 17,
+  },
+
+  calorieCard: {
+    flex: 1,
+    backgroundColor: isDarkMode ? theme.card : '#FBECEE',
+    padding: 13,
+    borderRadius: 17,
+  },
+
+  activityTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
   },
 
   waterTitle: {
-    fontSize: 16,
+    fontSize: 11,
+    color: isDarkMode ? theme.text : '#2878B2',
+    fontWeight: '500',
+  },
+
+  calorieTitle: {
+    fontSize: 11,
+    color: isDarkMode ? theme.text : '#B94A50',
+    fontWeight: '500',
+  },
+
+  valueRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    marginTop: 8,
+  },
+
+  activityValue: {
+    fontSize: 24,
     fontWeight: 'bold',
     color: theme.text,
   },
 
-  waterValue: {
-    fontSize: 25,
-    fontWeight: 'bold',
-    color: theme.primary,
-    marginTop: 10,
+  unit: {
+    fontSize: 11,
+    color: theme.secondaryText,
+    marginLeft: 4,
   },
 
-  waterProgress: {
-    height: 9,
-    backgroundColor: theme.border,
-    borderRadius: 10,
-    marginTop: 15,
+  activityGoal: {
+    fontSize: 11,
+    color: theme.secondaryText,
+    marginTop: 3,
+  },
+
+  smallProgressBackground: {
+    height: 4,
+    backgroundColor: isDarkMode ? theme.border : '#FFFFFF',
+    borderRadius: 5,
     overflow: 'hidden',
+    marginTop: 11,
   },
 
   waterProgressFill: {
     height: '100%',
-    backgroundColor: theme.primary,
-    borderRadius: 10,
+    backgroundColor: '#278BCB',
+    borderRadius: 5,
   },
 
-  goalCard: {
+  calorieProgressFill: {
+    height: '100%',
+    backgroundColor: '#D94D56',
+    borderRadius: 5,
+  },
+
+  weekCard: {
     backgroundColor: theme.card,
     marginHorizontal: 16,
-    padding: 18,
-    borderRadius: 18,
-    marginBottom: 25,
-    elevation: 2,
+    marginTop: 13,
+    padding: 15,
+    borderRadius: 19,
   },
 
-  goalHeader: {
+  weekHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 10,
-    marginTop: 5,
+    alignItems: 'center',
   },
 
-  goalName: {
-    fontSize: 14,
-    color: theme.secondaryText,
-  },
-
-  goalPercentage: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: theme.primary,
-  },
-
-  progressBackground: {
-    height: 9,
-    backgroundColor: theme.border,
-    borderRadius: 10,
-    overflow: 'hidden',
-    marginBottom: 17,
-  },
-
-  progressFill: {
-    height: '100%',
-    backgroundColor: theme.primary,
-    borderRadius: 10,
-  },
-
-  quickCard: {
-    backgroundColor: theme.input,
-    marginHorizontal: 16,
-    padding: 20,
-    borderRadius: 18,
-    marginBottom: 25,
-  },
-
-  quickTitle: {
-    fontSize: 17,
+  weekTitle: {
+    fontSize: 15,
     fontWeight: 'bold',
     color: theme.text,
   },
 
-  quickDescription: {
-    fontSize: 13,
+  weekSubtitle: {
+    fontSize: 11,
     color: theme.secondaryText,
-    lineHeight: 20,
-    marginTop: 8,
+    marginTop: 4,
   },
 
-  quickAction: {
-    fontSize: 14,
+  weekAverage: {
+    fontSize: 10,
     fontWeight: 'bold',
-    color: theme.primary,
-    marginTop: 15,
+    color: isDarkMode ? '#8DC9AE' : '#21664F',
+  },
+
+  chart: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-end',
+    marginTop: 16,
+    paddingHorizontal: 3,
+  },
+
+  chartColumn: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+  },
+
+  chartBar: {
+    width: 17,
+    borderRadius: 6,
+  },
+
+  chartLabel: {
+    fontSize: 10,
+    color: theme.secondaryText,
+    marginTop: 7,
+  },
+
+  todayChartLabel: {
+    color: isDarkMode ? '#8DC9AE' : '#21664F',
+    fontWeight: 'bold',
+  },
+
+  messageCard: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: isDarkMode ? theme.card : '#EAF0DF',
+    marginHorizontal: 16,
+    marginTop: 13,
+    padding: 14,
+    borderRadius: 17,
+  },
+
+  messageIcon: {
+    width: 25,
+    height: 25,
+    borderRadius: 8,
+    backgroundColor: '#D5EBAA',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+  },
+
+  messageContent: {
+    flex: 1,
+  },
+
+  messageTitle: {
+    fontSize: 13,
+    fontWeight: 'bold',
+    color: theme.text,
+  },
+
+  messageDescription: {
+    fontSize: 12,
+    color: theme.secondaryText,
+    marginTop: 5,
+  },
+
+  messageHint: {
+    fontSize: 11,
+    color: theme.secondaryText,
+    marginTop: 2,
   },
 });
