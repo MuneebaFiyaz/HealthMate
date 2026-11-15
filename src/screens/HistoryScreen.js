@@ -23,17 +23,23 @@ export default function HistoryScreen() {
   const database = useSQLiteContext();
 
   const [records, setRecords] = useState([]);
+  const [searchDate, setSearchDate] = useState('');
   const [editingId, setEditingId] = useState(null);
+
   const [steps, setSteps] = useState('');
   const [calories, setCalories] = useState('');
   const [water, setWater] = useState('');
 
+  const [isSearching, setIsSearching] = useState(false);
+
+  // Load all records from the database.
   const loadRecords = async () => {
     try {
       const savedRecords = await getHealthRecords(database);
       setRecords(savedRecords);
     } catch (error) {
       console.error('Error loading health records:', error);
+      Alert.alert('Error', 'Could not load health records.');
     }
   };
 
@@ -42,6 +48,50 @@ export default function HistoryScreen() {
       loadRecords();
     }, [database])
   );
+
+  // Filter records using the date entered by the user.
+  const filteredRecords = isSearching
+    ? records.filter(record => record.date === searchDate.trim())
+    : records;
+
+  const handleSearch = () => {
+    const date = searchDate.trim();
+
+    if (!date) {
+      Alert.alert('Missing Date', 'Please enter a date to search.');
+      return;
+    }
+
+    // Check that the date follows YYYY-MM-DD format.
+    const datePattern = /^\d{4}-\d{2}-\d{2}$/;
+
+    if (!datePattern.test(date)) {
+      Alert.alert(
+        'Invalid Date',
+        'Please enter the date in YYYY-MM-DD format.'
+      );
+      return;
+    }
+
+    // Check that the entered date is a real calendar date.
+    const parsedDate = new Date(`${date}T00:00:00`);
+
+    if (
+      parsedDate.getFullYear() !== Number(date.slice(0, 4)) ||
+      parsedDate.getMonth() + 1 !== Number(date.slice(5, 7)) ||
+      parsedDate.getDate() !== Number(date.slice(8, 10))
+    ) {
+      Alert.alert('Invalid Date', 'Please enter a valid calendar date.');
+      return;
+    }
+
+    setIsSearching(true);
+  };
+
+  const clearSearch = () => {
+    setSearchDate('');
+    setIsSearching(false);
+  };
 
   const handleEdit = (record) => {
     setEditingId(record.id);
@@ -91,11 +141,7 @@ export default function HistoryScreen() {
         date: originalRecord.date,
       });
 
-      setEditingId(null);
-      setSteps('');
-      setCalories('');
-      setWater('');
-
+      cancelEdit();
       await loadRecords();
 
       Alert.alert('Success', 'Health record updated successfully.');
@@ -134,10 +180,7 @@ export default function HistoryScreen() {
 
               await loadRecords();
 
-              Alert.alert(
-                'Success',
-                'Health record deleted successfully.'
-              );
+              Alert.alert('Success', 'Health record deleted successfully.');
             } catch (error) {
               console.error('Error deleting health record:', error);
               Alert.alert('Error', 'Could not delete the health record.');
@@ -156,18 +199,58 @@ export default function HistoryScreen() {
       }
     >
       <Text style={styles.title}>Health History</Text>
+
       <Text style={styles.subtitle}>
         View and manage your previous health records.
       </Text>
 
-      {records.length === 0 ? (
+      {/* Search records by date */}
+      <View style={styles.searchCard}>
+        <Text style={styles.searchTitle}>Search by Date</Text>
+
+        <TextInput
+          style={styles.searchInput}
+          placeholder="YYYY-MM-DD"
+          placeholderTextColor="#8A9AAF"
+          value={searchDate}
+          onChangeText={setSearchDate}
+          keyboardType="numbers-and-punctuation"
+          maxLength={10}
+        />
+
+        <View style={styles.buttonRow}>
+          <TouchableOpacity
+            style={styles.searchButton}
+            onPress={handleSearch}
+          >
+            <Text style={styles.buttonText}>Search</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.clearButton}
+            onPress={clearSearch}
+          >
+            <Text style={styles.buttonText}>Show All</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      <Text style={styles.resultText}>
+        {isSearching
+          ? `Search results for ${searchDate.trim()}`
+          : 'All Health Records'}
+      </Text>
+
+      {filteredRecords.length === 0 ? (
         <View style={styles.emptyCard}>
           <Text style={styles.emptyText}>
-            No health records found.
+            {isSearching
+              ? 'No records found for this date.'
+              : 'No health records found.'}
           </Text>
         </View>
       ) : (
-        records.map(record => (
+        filteredRecords.map(record => (
           <View style={styles.recordCard} key={record.id}>
             <Text style={styles.date}>{record.date}</Text>
 
@@ -270,7 +353,35 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#718096',
     marginTop: 8,
-    marginBottom: 25,
+    marginBottom: 20,
+  },
+  searchCard: {
+    backgroundColor: '#FFFFFF',
+    padding: 17,
+    borderRadius: 18,
+    marginBottom: 20,
+    elevation: 2,
+  },
+  searchTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#183B65',
+    marginBottom: 10,
+  },
+  searchInput: {
+    backgroundColor: '#F5F9FF',
+    borderWidth: 1,
+    borderColor: '#DCE8F5',
+    borderRadius: 10,
+    padding: 12,
+    fontSize: 15,
+    color: '#183B65',
+  },
+  resultText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#183B65',
+    marginBottom: 14,
   },
   emptyCard: {
     backgroundColor: '#FFFFFF',
@@ -281,6 +392,7 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 15,
     color: '#718096',
+    textAlign: 'center',
   },
   recordCard: {
     backgroundColor: '#FFFFFF',
@@ -323,6 +435,20 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 10,
     marginTop: 10,
+  },
+  searchButton: {
+    flex: 1,
+    backgroundColor: '#2878D0',
+    padding: 13,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  clearButton: {
+    flex: 1,
+    backgroundColor: '#718096',
+    padding: 13,
+    borderRadius: 10,
+    alignItems: 'center',
   },
   editButton: {
     flex: 1,
