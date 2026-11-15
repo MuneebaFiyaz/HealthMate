@@ -1,22 +1,82 @@
 
-import { StatusBar } from 'expo-status-bar';
+import { useCallback, useState } from 'react';
 import {
   StyleSheet,
   Text,
   View,
   ScrollView,
 } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
+import { useSQLiteContext } from 'expo-sqlite';
+import { Ionicons } from '@expo/vector-icons';
+
+import { getHealthRecords } from '../database/database';
+
+const STEP_GOAL = 10000;
+const WATER_GOAL = 2500;
 
 export default function HomeScreen() {
+  const database = useSQLiteContext();
+
+  const [todayData, setTodayData] = useState({
+    steps: 0,
+    calories: 0,
+    water: 0,
+  });
+
+  useFocusEffect(
+    useCallback(() => {
+      async function loadTodayData() {
+        try {
+          const records = await getHealthRecords(database);
+
+          const today = new Date();
+          const todayDate = [
+            today.getFullYear(),
+            String(today.getMonth() + 1).padStart(2, '0'),
+            String(today.getDate()).padStart(2, '0'),
+          ].join('-');
+
+          const todaysRecords = records.filter(
+            record => record.date === todayDate
+          );
+
+          const totals = todaysRecords.reduce(
+            (result, record) => ({
+              steps: result.steps + record.steps,
+              calories: result.calories + record.calories,
+              water: result.water + record.water,
+            }),
+            { steps: 0, calories: 0, water: 0 }
+          );
+
+          setTodayData(totals);
+        } catch (error) {
+          console.error('Error loading dashboard data:', error);
+        }
+      }
+
+      loadTodayData();
+    }, [database])
+  );
+
+  const stepPercentage = Math.min(
+    (todayData.steps / STEP_GOAL) * 100,
+    100
+  );
+
+  const waterPercentage = Math.min(
+    (todayData.water / WATER_GOAL) * 100,
+    100
+  );
+
   return (
     <View style={styles.container}>
-      <StatusBar style="dark" />
-
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View style={styles.header}>
           <View>
-            <Text style={styles.greeting}>Good morning,</Text>
+            <Text style={styles.greeting}>Good day,</Text>
             <Text style={styles.title}>HealthMate</Text>
           </View>
 
@@ -34,15 +94,29 @@ export default function HomeScreen() {
 
         <View style={styles.cardContainer}>
           <View style={styles.card}>
-            <Text style={styles.cardIcon}>👟</Text>
-            <Text style={styles.cardValue}>7,850</Text>
+            <Ionicons
+              name="footsteps"
+              size={25}
+              color="#2878D0"
+              style={styles.cardIcon}
+            />
+            <Text style={styles.cardValue}>
+              {todayData.steps.toLocaleString()}
+            </Text>
             <Text style={styles.cardLabel}>Steps</Text>
             <Text style={styles.cardGoal}>Goal: 10,000</Text>
           </View>
 
           <View style={styles.card}>
-            <Text style={styles.cardIcon}>🔥</Text>
-            <Text style={styles.cardValue}>420</Text>
+            <Ionicons
+              name="flame"
+              size={25}
+              color="#E58A45"
+              style={styles.cardIcon}
+            />
+            <Text style={styles.cardValue}>
+              {todayData.calories.toLocaleString()}
+            </Text>
             <Text style={styles.cardLabel}>Calories</Text>
             <Text style={styles.cardGoal}>kcal burned</Text>
           </View>
@@ -51,15 +125,26 @@ export default function HomeScreen() {
         {/* Water Intake */}
         <View style={styles.waterCard}>
           <View>
-            <Text style={styles.waterTitle}>💧 Water Intake</Text>
-            <Text style={styles.waterValue}>2,000 ml</Text>
+            <Text style={styles.waterTitle}>
+              <Ionicons name="water" size={17} color="#2878D0" /> Water Intake
+            </Text>
+
+            <Text style={styles.waterValue}>
+              {todayData.water.toLocaleString()} ml
+            </Text>
+
             <Text style={styles.cardGoal}>
               Daily goal: 2,500 ml
             </Text>
           </View>
 
           <View style={styles.waterProgress}>
-            <View style={styles.waterProgressFill} />
+            <View
+              style={[
+                styles.waterProgressFill,
+                { width: `${waterPercentage}%` },
+              ]}
+            />
           </View>
         </View>
 
@@ -69,23 +154,33 @@ export default function HomeScreen() {
         <View style={styles.goalCard}>
           <View style={styles.goalHeader}>
             <Text style={styles.goalName}>Step Goal</Text>
-            <Text style={styles.goalPercentage}>78.5%</Text>
+            <Text style={styles.goalPercentage}>
+              {stepPercentage.toFixed(1)}%
+            </Text>
           </View>
 
           <View style={styles.progressBackground}>
             <View
-              style={[styles.progressFill, { width: '78.5%' }]}
+              style={[
+                styles.progressFill,
+                { width: `${stepPercentage}%` },
+              ]}
             />
           </View>
 
           <View style={styles.goalHeader}>
             <Text style={styles.goalName}>Water Goal</Text>
-            <Text style={styles.goalPercentage}>80%</Text>
+            <Text style={styles.goalPercentage}>
+              {waterPercentage.toFixed(1)}%
+            </Text>
           </View>
 
           <View style={styles.progressBackground}>
             <View
-              style={[styles.progressFill, { width: '80%' }]}
+              style={[
+                styles.progressFill,
+                { width: `${waterPercentage}%` },
+              ]}
             />
           </View>
         </View>
@@ -184,7 +279,6 @@ const styles = StyleSheet.create({
   },
 
   cardIcon: {
-    fontSize: 25,
     marginBottom: 12,
   },
 
@@ -237,7 +331,6 @@ const styles = StyleSheet.create({
   },
 
   waterProgressFill: {
-    width: '80%',
     height: '100%',
     backgroundColor: '#3998E8',
     borderRadius: 10,
