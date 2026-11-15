@@ -9,14 +9,19 @@ import {
   ScrollView,
   Alert,
 } from 'react-native';
+import { useSQLiteContext } from 'expo-sqlite';
+
+import { addHealthRecord } from '../database/database';
 
 export default function AddRecordScreen() {
+  const database = useSQLiteContext();
+
   const [steps, setSteps] = useState('');
   const [calories, setCalories] = useState('');
   const [water, setWater] = useState('');
 
-  const handleSave = () => {
-    if (!steps || !calories || !water) {
+  const handleSave = async () => {
+    if (!steps.trim() || !calories.trim() || !water.trim()) {
       Alert.alert('Missing Information', 'Please fill in all fields.');
       return;
     }
@@ -25,17 +30,35 @@ export default function AddRecordScreen() {
       steps: Number(steps),
       calories: Number(calories),
       water: Number(water),
-      date: new Date().toISOString().split('T')[0],
+      date: [
+        new Date().getFullYear(),
+        String(new Date().getMonth() + 1).padStart(2, '0'),
+        String(new Date().getDate()).padStart(2, '0'),
+      ].join('-'),
     };
 
-    Alert.alert(
-      'Record Created',
-      `Steps: ${record.steps}\nCalories: ${record.calories} kcal\nWater: ${record.water} ml`
-    );
+    const values = [record.steps, record.calories, record.water];
 
-    setSteps('');
-    setCalories('');
-    setWater('');
+    if (values.some(value => !Number.isInteger(value) || value < 0)) {
+      Alert.alert(
+        'Invalid Information',
+        'Please enter valid whole numbers greater than or equal to zero.'
+      );
+      return;
+    }
+
+    try {
+      await addHealthRecord(database, record);
+
+      Alert.alert('Success', 'Your health record has been saved.');
+
+      setSteps('');
+      setCalories('');
+      setWater('');
+    } catch (error) {
+      console.error('Error saving health record:', error);
+      Alert.alert('Error', 'Could not save your health record.');
+    }
   };
 
   return (
