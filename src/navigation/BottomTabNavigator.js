@@ -6,24 +6,27 @@ import HomeScreen from '../screens/HomeScreen';
 import AddRecordScreen from '../screens/AddRecordScreen';
 import HistoryScreen from '../screens/HistoryScreen';
 import SettingsScreen from '../screens/SettingsScreen';
+import { useTheme } from '../context/ThemeContext';
 
 const Tab = createBottomTabNavigator();
 
 export default function BottomTabNavigator() {
+  const { theme } = useTheme();
+
   return (
     <Tab.Navigator
       screenOptions={{
         headerShown: false,
         tabBarShowLabel: true,
-        tabBarActiveTintColor: '#2878D0',
-        tabBarInactiveTintColor: '#8A9AAF',
+        tabBarActiveTintColor: theme.primary,
+        tabBarInactiveTintColor: theme.secondaryText,
 
         tabBarStyle: {
           height: 70,
           paddingTop: 8,
           paddingBottom: 8,
-          backgroundColor: '#FFFFFF',
-          borderTopColor: '#E5EFFB',
+          backgroundColor: theme.tabBar,
+          borderTopColor: theme.border,
           borderTopWidth: 1,
           elevation: 8,
         },

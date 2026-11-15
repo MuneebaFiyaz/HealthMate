@@ -4,6 +4,7 @@ import { SQLiteProvider } from 'expo-sqlite';
 
 import BottomTabNavigator from './src/navigation/BottomTabNavigator';
 import { initializeDatabase } from './src/database/database';
+import { ThemeProvider } from './src/context/ThemeContext';
 
 export default function App() {
   return (
@@ -11,9 +12,11 @@ export default function App() {
       databaseName="healthmate.db"
       onInit={initializeDatabase}
     >
-      <NavigationContainer>
-        <BottomTabNavigator />
-      </NavigationContainer>
+      <ThemeProvider>
+        <NavigationContainer>
+          <BottomTabNavigator />
+        </NavigationContainer>
+      </ThemeProvider>
     </SQLiteProvider>
   );
 }

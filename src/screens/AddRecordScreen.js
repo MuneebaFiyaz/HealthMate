@@ -12,9 +12,13 @@ import {
 import { useSQLiteContext } from 'expo-sqlite';
 
 import { addHealthRecord } from '../database/database';
+import { useTheme } from '../context/ThemeContext';
 
 export default function AddRecordScreen() {
   const database = useSQLiteContext();
+  const { theme } = useTheme();
+
+  const styles = createStyles(theme);
 
   const [steps, setSteps] = useState('');
   const [calories, setCalories] = useState('');
@@ -73,6 +77,7 @@ export default function AddRecordScreen() {
         <TextInput
           style={styles.input}
           placeholder="Enter number of steps"
+          placeholderTextColor={theme.secondaryText}
           keyboardType="numeric"
           value={steps}
           onChangeText={setSteps}
@@ -82,6 +87,7 @@ export default function AddRecordScreen() {
         <TextInput
           style={styles.input}
           placeholder="Enter calories"
+          placeholderTextColor={theme.secondaryText}
           keyboardType="numeric"
           value={calories}
           onChangeText={setCalories}
@@ -91,6 +97,7 @@ export default function AddRecordScreen() {
         <TextInput
           style={styles.input}
           placeholder="Enter water intake"
+          placeholderTextColor={theme.secondaryText}
           keyboardType="numeric"
           value={water}
           onChangeText={setWater}
@@ -107,26 +114,27 @@ export default function AddRecordScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+// Screen styles change according to the selected theme.
+const createStyles = (theme) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F9FF',
+    backgroundColor: theme.background,
     padding: 20,
   },
   title: {
     fontSize: 26,
     fontWeight: 'bold',
-    color: '#183B65',
+    color: theme.text,
     marginTop: 35,
   },
   subtitle: {
     fontSize: 14,
-    color: '#718096',
+    color: theme.secondaryText,
     marginTop: 8,
     marginBottom: 25,
   },
   formCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: theme.card,
     padding: 20,
     borderRadius: 18,
     elevation: 2,
@@ -134,20 +142,21 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#183B65',
+    color: theme.text,
     marginBottom: 8,
     marginTop: 15,
   },
   input: {
-    backgroundColor: '#F5F9FF',
+    backgroundColor: theme.input,
     borderWidth: 1,
-    borderColor: '#DCE8F5',
+    borderColor: theme.border,
     borderRadius: 10,
     padding: 14,
     fontSize: 15,
+    color: theme.text,
   },
   saveButton: {
-    backgroundColor: '#2878D0',
+    backgroundColor: theme.primary,
     padding: 16,
     borderRadius: 12,
     alignItems: 'center',

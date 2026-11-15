@@ -11,12 +11,16 @@ import { useSQLiteContext } from 'expo-sqlite';
 import { Ionicons } from '@expo/vector-icons';
 
 import { getHealthRecords } from '../database/database';
+import { useTheme } from '../context/ThemeContext';
 
 const STEP_GOAL = 10000;
 const WATER_GOAL = 2500;
 
 export default function HomeScreen() {
   const database = useSQLiteContext();
+  const { theme } = useTheme();
+
+  const styles = createStyles(theme);
 
   const [todayData, setTodayData] = useState({
     steps: 0,
@@ -24,6 +28,7 @@ export default function HomeScreen() {
     water: 0,
   });
 
+  // Load today's records whenever the Home screen is opened.
   useFocusEffect(
     useCallback(() => {
       async function loadTodayData() {
@@ -41,6 +46,7 @@ export default function HomeScreen() {
             record => record.date === todayDate
           );
 
+          // Add together all records saved for today.
           const totals = todaysRecords.reduce(
             (result, record) => ({
               steps: result.steps + record.steps,
@@ -60,6 +66,7 @@ export default function HomeScreen() {
     }, [database])
   );
 
+  // Calculate progress towards the daily goals.
   const stepPercentage = Math.min(
     (todayData.steps / STEP_GOAL) * 100,
     100
@@ -206,10 +213,11 @@ export default function HomeScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+// Colours are taken from the selected theme.
+const createStyles = (theme) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F9FF',
+    backgroundColor: theme.background,
   },
 
   header: {
@@ -222,19 +230,19 @@ const styles = StyleSheet.create({
 
   greeting: {
     fontSize: 15,
-    color: '#718096',
+    color: theme.secondaryText,
   },
 
   title: {
     fontSize: 27,
     fontWeight: 'bold',
-    color: '#183B65',
+    color: theme.text,
     marginTop: 4,
   },
 
   subtitle: {
     fontSize: 14,
-    color: '#718096',
+    color: theme.secondaryText,
     marginHorizontal: 22,
     marginTop: 12,
     marginBottom: 25,
@@ -244,7 +252,7 @@ const styles = StyleSheet.create({
     width: 45,
     height: 45,
     borderRadius: 25,
-    backgroundColor: '#DCEBFF',
+    backgroundColor: theme.input,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -252,13 +260,13 @@ const styles = StyleSheet.create({
   profileText: {
     fontSize: 19,
     fontWeight: 'bold',
-    color: '#2878D0',
+    color: theme.primary,
   },
 
   sectionTitle: {
     fontSize: 19,
     fontWeight: 'bold',
-    color: '#183B65',
+    color: theme.text,
     marginHorizontal: 22,
     marginBottom: 14,
   },
@@ -272,7 +280,7 @@ const styles = StyleSheet.create({
 
   card: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: theme.card,
     padding: 17,
     borderRadius: 18,
     elevation: 2,
@@ -285,23 +293,23 @@ const styles = StyleSheet.create({
   cardValue: {
     fontSize: 23,
     fontWeight: 'bold',
-    color: '#183B65',
+    color: theme.text,
   },
 
   cardLabel: {
     fontSize: 14,
-    color: '#52677F',
+    color: theme.secondaryText,
     marginTop: 4,
   },
 
   cardGoal: {
     fontSize: 12,
-    color: '#8A9AAF',
+    color: theme.secondaryText,
     marginTop: 7,
   },
 
   waterCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: theme.card,
     marginHorizontal: 16,
     marginBottom: 25,
     padding: 18,
@@ -312,19 +320,19 @@ const styles = StyleSheet.create({
   waterTitle: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#183B65',
+    color: theme.text,
   },
 
   waterValue: {
     fontSize: 25,
     fontWeight: 'bold',
-    color: '#2878D0',
+    color: theme.primary,
     marginTop: 10,
   },
 
   waterProgress: {
     height: 9,
-    backgroundColor: '#E5EFFB',
+    backgroundColor: theme.border,
     borderRadius: 10,
     marginTop: 15,
     overflow: 'hidden',
@@ -332,12 +340,12 @@ const styles = StyleSheet.create({
 
   waterProgressFill: {
     height: '100%',
-    backgroundColor: '#3998E8',
+    backgroundColor: theme.primary,
     borderRadius: 10,
   },
 
   goalCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: theme.card,
     marginHorizontal: 16,
     padding: 18,
     borderRadius: 18,
@@ -354,18 +362,18 @@ const styles = StyleSheet.create({
 
   goalName: {
     fontSize: 14,
-    color: '#52677F',
+    color: theme.secondaryText,
   },
 
   goalPercentage: {
     fontSize: 14,
     fontWeight: 'bold',
-    color: '#2878D0',
+    color: theme.primary,
   },
 
   progressBackground: {
     height: 9,
-    backgroundColor: '#E5EFFB',
+    backgroundColor: theme.border,
     borderRadius: 10,
     overflow: 'hidden',
     marginBottom: 17,
@@ -373,12 +381,12 @@ const styles = StyleSheet.create({
 
   progressFill: {
     height: '100%',
-    backgroundColor: '#3998E8',
+    backgroundColor: theme.primary,
     borderRadius: 10,
   },
 
   quickCard: {
-    backgroundColor: '#E5F1FF',
+    backgroundColor: theme.input,
     marginHorizontal: 16,
     padding: 20,
     borderRadius: 18,
@@ -388,12 +396,12 @@ const styles = StyleSheet.create({
   quickTitle: {
     fontSize: 17,
     fontWeight: 'bold',
-    color: '#183B65',
+    color: theme.text,
   },
 
   quickDescription: {
     fontSize: 13,
-    color: '#52677F',
+    color: theme.secondaryText,
     lineHeight: 20,
     marginTop: 8,
   },
@@ -401,7 +409,7 @@ const styles = StyleSheet.create({
   quickAction: {
     fontSize: 14,
     fontWeight: 'bold',
-    color: '#2878D0',
+    color: theme.primary,
     marginTop: 15,
   },
 });

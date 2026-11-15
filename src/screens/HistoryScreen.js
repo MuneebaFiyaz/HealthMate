@@ -18,9 +18,13 @@ import {
   updateHealthRecord,
   deleteHealthRecord,
 } from '../database/database';
+import { useTheme } from '../context/ThemeContext';
 
 export default function HistoryScreen() {
   const database = useSQLiteContext();
+  const { theme } = useTheme();
+
+  const styles = createStyles(theme);
 
   const [records, setRecords] = useState([]);
   const [searchDate, setSearchDate] = useState('');
@@ -195,7 +199,11 @@ export default function HistoryScreen() {
     <ScrollView
       style={styles.container}
       refreshControl={
-        <RefreshControl refreshing={false} onRefresh={loadRecords} />
+        <RefreshControl
+          refreshing={false}
+          onRefresh={loadRecords}
+          tintColor={theme.primary}
+        />
       }
     >
       <Text style={styles.title}>Health History</Text>
@@ -211,7 +219,7 @@ export default function HistoryScreen() {
         <TextInput
           style={styles.searchInput}
           placeholder="YYYY-MM-DD"
-          placeholderTextColor="#8A9AAF"
+          placeholderTextColor={theme.secondaryText}
           value={searchDate}
           onChangeText={setSearchDate}
           keyboardType="numbers-and-punctuation"
@@ -262,6 +270,7 @@ export default function HistoryScreen() {
                   keyboardType="numeric"
                   value={steps}
                   onChangeText={setSteps}
+                  placeholderTextColor={theme.secondaryText}
                 />
 
                 <Text style={styles.label}>Calories Burned (kcal)</Text>
@@ -270,6 +279,7 @@ export default function HistoryScreen() {
                   keyboardType="numeric"
                   value={calories}
                   onChangeText={setCalories}
+                  placeholderTextColor={theme.secondaryText}
                 />
 
                 <Text style={styles.label}>Water Intake (ml)</Text>
@@ -278,6 +288,7 @@ export default function HistoryScreen() {
                   keyboardType="numeric"
                   value={water}
                   onChangeText={setWater}
+                  placeholderTextColor={theme.secondaryText}
                 />
 
                 <View style={styles.buttonRow}>
@@ -337,26 +348,27 @@ export default function HistoryScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+// Styles use the colours from the selected theme.
+const createStyles = (theme) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F9FF',
+    backgroundColor: theme.background,
     padding: 20,
   },
   title: {
     fontSize: 26,
     fontWeight: 'bold',
-    color: '#183B65',
+    color: theme.text,
     marginTop: 35,
   },
   subtitle: {
     fontSize: 14,
-    color: '#718096',
+    color: theme.secondaryText,
     marginTop: 8,
     marginBottom: 20,
   },
   searchCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: theme.card,
     padding: 17,
     borderRadius: 18,
     marginBottom: 20,
@@ -365,37 +377,37 @@ const styles = StyleSheet.create({
   searchTitle: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#183B65',
+    color: theme.text,
     marginBottom: 10,
   },
   searchInput: {
-    backgroundColor: '#F5F9FF',
+    backgroundColor: theme.input,
     borderWidth: 1,
-    borderColor: '#DCE8F5',
+    borderColor: theme.border,
     borderRadius: 10,
     padding: 12,
     fontSize: 15,
-    color: '#183B65',
+    color: theme.text,
   },
   resultText: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#183B65',
+    color: theme.text,
     marginBottom: 14,
   },
   emptyCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: theme.card,
     padding: 25,
     borderRadius: 18,
     alignItems: 'center',
   },
   emptyText: {
     fontSize: 15,
-    color: '#718096',
+    color: theme.secondaryText,
     textAlign: 'center',
   },
   recordCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: theme.card,
     padding: 20,
     borderRadius: 18,
     marginBottom: 15,
@@ -404,7 +416,7 @@ const styles = StyleSheet.create({
   date: {
     fontSize: 17,
     fontWeight: 'bold',
-    color: '#2878D0',
+    color: theme.primary,
     marginBottom: 15,
   },
   recordRow: {
@@ -414,22 +426,23 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 14,
-    color: '#718096',
+    color: theme.secondaryText,
     marginBottom: 8,
   },
   value: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#183B65',
+    color: theme.text,
   },
   input: {
-    backgroundColor: '#F5F9FF',
+    backgroundColor: theme.input,
     borderWidth: 1,
-    borderColor: '#DCE8F5',
+    borderColor: theme.border,
     borderRadius: 10,
     padding: 12,
     marginBottom: 15,
     fontSize: 15,
+    color: theme.text,
   },
   buttonRow: {
     flexDirection: 'row',
@@ -438,7 +451,7 @@ const styles = StyleSheet.create({
   },
   searchButton: {
     flex: 1,
-    backgroundColor: '#2878D0',
+    backgroundColor: theme.primary,
     padding: 13,
     borderRadius: 10,
     alignItems: 'center',
@@ -452,7 +465,7 @@ const styles = StyleSheet.create({
   },
   editButton: {
     flex: 1,
-    backgroundColor: '#2878D0',
+    backgroundColor: theme.primary,
     padding: 13,
     borderRadius: 10,
     alignItems: 'center',
@@ -466,7 +479,7 @@ const styles = StyleSheet.create({
   },
   saveButton: {
     flex: 1,
-    backgroundColor: '#2878D0',
+    backgroundColor: theme.primary,
     padding: 13,
     borderRadius: 10,
     alignItems: 'center',
