@@ -22,9 +22,9 @@ export default function BottomTabNavigator() {
         tabBarInactiveTintColor: theme.secondaryText,
 
         tabBarStyle: {
-          height: 70,
-          paddingTop: 8,
-          paddingBottom: 8,
+          height: 65,
+          paddingTop: 5,
+          paddingBottom: 5,
           backgroundColor: theme.tabBar,
           borderTopColor: theme.border,
           borderTopWidth: 1,

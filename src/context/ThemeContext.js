@@ -3,27 +3,28 @@ import { createContext, useContext, useState } from 'react';
 
 const ThemeContext = createContext();
 
-// Colours used by the light and dark themes.
+// Light theme
 const lightTheme = {
-  background: '#F5F9FF',
+  background: '#F5F7F2',
   card: '#FFFFFF',
-  text: '#183B65',
-  secondaryText: '#718096',
-  primary: '#2878D0',
-  border: '#E5EFFB',
-  input: '#F5F9FF',
+  text: '#20483D',
+  secondaryText: '#718078',
+  primary: '#21664F',
+  border: '#E2E9DF',
+  input: '#EDF2E9',
   tabBar: '#FFFFFF',
 };
 
+// Dark theme
 const darkTheme = {
-  background: '#101C2D',
-  card: '#1B2B40',
-  text: '#F1F5F9',
-  secondaryText: '#A5B4C7',
-  primary: '#55A5F5',
-  border: '#30445D',
-  input: '#24364D',
-  tabBar: '#1B2B40',
+  background: '#121212',
+  card: '#1E1E1E',
+  text: '#FFFFFF',
+  secondaryText: '#B0B0B0',
+  primary: '#80CBC4',
+  border: '#333333',
+  input: '#292929',
+  tabBar: '#1E1E1E',
 };
 
 export function ThemeProvider({ children }) {
