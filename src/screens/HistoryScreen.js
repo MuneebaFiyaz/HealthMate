@@ -1,5 +1,6 @@
 
 import { useCallback, useState } from 'react';
+
 import {
   View,
   Text,
@@ -9,6 +10,7 @@ import {
   ScrollView,
   RefreshControl,
 } from 'react-native';
+
 import { useSQLiteContext } from 'expo-sqlite';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -18,8 +20,63 @@ import {
   updateHealthRecord,
   deleteHealthRecord,
 } from '../database/database';
+
 import { useTheme } from '../context/ThemeContext';
 import MessageModal from '../components/MessageModal';
+
+const dateFilters = [
+  { label: 'All dates', value: 'all' },
+  { label: 'Last 7 days', value: 'week' },
+  { label: 'This month', value: 'month' },
+];
+
+// Convert YYYY-MM-DD into a local Date.
+const parseDate = (dateString) => {
+  const [year, month, day] = dateString.split('-').map(Number);
+  return new Date(year, month - 1, day);
+};
+
+// Format a date for the record card.
+const formatRecordDate = (dateString) => {
+  const date = parseDate(dateString);
+  const today = new Date();
+  const yesterday = new Date();
+
+  yesterday.setDate(today.getDate() - 1);
+
+  const isSameDay = (first, second) =>
+    first.getFullYear() === second.getFullYear() &&
+    first.getMonth() === second.getMonth() &&
+    first.getDate() === second.getDate();
+
+  if (isSameDay(date, today)) {
+    return 'Today';
+  }
+
+  if (isSameDay(date, yesterday)) {
+    return 'Yesterday';
+  }
+
+  return date.toLocaleDateString('en-GB', {
+    weekday: 'long',
+  });
+};
+
+// Display the date below the day label.
+const formatShortDate = (dateString) => {
+  return parseDate(dateString).toLocaleDateString('en-GB', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+  });
+};
+
+const formatMonth = (dateString) => {
+  return parseDate(dateString).toLocaleDateString('en-GB', {
+    month: 'long',
+    year: 'numeric',
+  });
+};
 
 export default function HistoryScreen() {
   const database = useSQLiteContext();
@@ -29,13 +86,16 @@ export default function HistoryScreen() {
 
   const [records, setRecords] = useState([]);
   const [searchDate, setSearchDate] = useState('');
+  const [activeFilter, setActiveFilter] = useState('all');
+  const [isSearching, setIsSearching] = useState(false);
+
+  const [expandedRecordId, setExpandedRecordId] = useState(null);
   const [editingId, setEditingId] = useState(null);
 
   const [steps, setSteps] = useState('');
   const [calories, setCalories] = useState('');
   const [water, setWater] = useState('');
 
-  const [isSearching, setIsSearching] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const [modal, setModal] = useState({
@@ -46,8 +106,12 @@ export default function HistoryScreen() {
     onConfirm: null,
   });
 
-  // Show a custom message box.
-  const showMessage = (title, message, type = 'success', onConfirm = null) => {
+  const showMessage = (
+    title,
+    message,
+    type = 'success',
+    onConfirm = null
+  ) => {
     setModal({
       visible: true,
       title,
@@ -67,7 +131,7 @@ export default function HistoryScreen() {
     });
   };
 
-  // Load all records from the database.
+  // Load saved records from SQLite.
   const loadRecords = async () => {
     try {
       const savedRecords = await getHealthRecords(database);
@@ -75,12 +139,17 @@ export default function HistoryScreen() {
       return true;
     } catch (error) {
       console.error('Error loading health records:', error);
-      showMessage('Error', 'Could not load health records.', 'error');
+
+      showMessage(
+        'Error',
+        'Could not load health records.',
+        'error'
+      );
+
       return false;
     }
   };
 
-  // Refresh the records when the screen is opened.
   useFocusEffect(
     useCallback(() => {
       loadRecords();
@@ -93,11 +162,7 @@ export default function HistoryScreen() {
     setIsRefreshing(false);
   };
 
-  // Filter records using the selected date.
-  const filteredRecords = isSearching
-    ? records.filter(record => record.date === searchDate.trim())
-    : records;
-
+  // Search for a record using YYYY-MM-DD.
   const handleSearch = () => {
     const date = searchDate.trim();
 
@@ -110,7 +175,6 @@ export default function HistoryScreen() {
       return;
     }
 
-    // Check that the date follows YYYY-MM-DD format.
     const datePattern = /^\d{4}-\d{2}-\d{2}$/;
 
     if (!datePattern.test(date)) {
@@ -122,8 +186,7 @@ export default function HistoryScreen() {
       return;
     }
 
-    // Check that the entered date is a real calendar date.
-    const parsedDate = new Date(`${date}T00:00:00`);
+    const parsedDate = parseDate(date);
 
     if (
       parsedDate.getFullYear() !== Number(date.slice(0, 4)) ||
@@ -139,15 +202,72 @@ export default function HistoryScreen() {
     }
 
     setIsSearching(true);
+    setActiveFilter('all');
+    setExpandedRecordId(null);
   };
 
   const clearSearch = () => {
     setSearchDate('');
     setIsSearching(false);
+    setActiveFilter('all');
+    setExpandedRecordId(null);
   };
 
-  const handleEdit = record => {
+  // Select a date filter.
+  const handleFilterChange = (filter) => {
+    setActiveFilter(filter);
+    setIsSearching(false);
+    setSearchDate('');
+    setExpandedRecordId(null);
+  };
+
+  // Filter records based on the selected option.
+  const filteredRecords = records.filter((record) => {
+    if (isSearching) {
+      return record.date === searchDate.trim();
+    }
+
+    if (activeFilter === 'week') {
+      const today = new Date();
+      today.setHours(23, 59, 59, 999);
+
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setHours(0, 0, 0, 0);
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
+
+      const recordDate = parseDate(record.date);
+
+      return recordDate >= sevenDaysAgo && recordDate <= today;
+    }
+
+    if (activeFilter === 'month') {
+      const today = new Date();
+      const recordDate = parseDate(record.date);
+
+      return (
+        recordDate.getMonth() === today.getMonth() &&
+        recordDate.getFullYear() === today.getFullYear()
+      );
+    }
+
+    return true;
+  });
+
+  // Expand a record to display its edit and delete options.
+  const handleRecordPress = (record) => {
+    if (editingId !== null) {
+      return;
+    }
+
+    setExpandedRecordId(
+      expandedRecordId === record.id ? null : record.id
+    );
+  };
+
+  const handleEdit = (record) => {
     setEditingId(record.id);
+    setExpandedRecordId(record.id);
+
     setSteps(String(record.steps));
     setCalories(String(record.calories));
     setWater(String(record.water));
@@ -160,6 +280,7 @@ export default function HistoryScreen() {
     setWater('');
   };
 
+  // Update an existing record.
   const handleUpdate = async () => {
     if (!steps.trim() || !calories.trim() || !water.trim()) {
       showMessage(
@@ -182,7 +303,11 @@ export default function HistoryScreen() {
       updatedRecord.water,
     ];
 
-    if (values.some(value => !Number.isInteger(value) || value < 0)) {
+    if (
+      values.some(
+        (value) => !Number.isInteger(value) || value < 0
+      )
+    ) {
       showMessage(
         'Invalid Information',
         'Please enter valid whole numbers greater than or equal to zero.',
@@ -193,7 +318,7 @@ export default function HistoryScreen() {
 
     try {
       const originalRecord = records.find(
-        record => record.id === editingId
+        (record) => record.id === editingId
       );
 
       if (!originalRecord) {
@@ -232,8 +357,8 @@ export default function HistoryScreen() {
     }
   };
 
-  // Delete a record after the user confirms.
-  const handleDelete = id => {
+  // Delete a record after confirmation.
+  const handleDelete = (id) => {
     showMessage(
       'Delete Record?',
       'Are you sure you want to delete this health record? This action cannot be undone.',
@@ -247,6 +372,8 @@ export default function HistoryScreen() {
           if (editingId === id) {
             cancelEdit();
           }
+
+          setExpandedRecordId(null);
 
           const loaded = await loadRecords();
 
@@ -270,11 +397,18 @@ export default function HistoryScreen() {
     );
   };
 
+  // Determine the month heading from the latest displayed record.
+  const monthHeading =
+    filteredRecords.length > 0
+      ? formatMonth(filteredRecords[0].date)
+      : 'Your records';
+
   return (
     <View style={styles.container}>
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
         refreshControl={
           <RefreshControl
             refreshing={isRefreshing}
@@ -283,99 +417,101 @@ export default function HistoryScreen() {
           />
         }
       >
-        {/* Header */}
+        {/* Page heading */}
         <View style={styles.header}>
-          <Text style={styles.brand}>HEALTHMATE</Text>
-          <Text style={styles.title}>Health History</Text>
-          <Text style={styles.subtitle}>
-            Your activity records in one place.
+          <Text style={styles.brand}>
+            YOUR WELLNESS JOURNEY
+          </Text>
+
+          <Text style={styles.title}>
+            Health records
           </Text>
         </View>
 
-        {/* Date search */}
-        <View style={styles.searchCard}>
-          <View style={styles.sectionHeading}>
-            <View style={styles.headingIcon}>
-              <Ionicons
-                name="calendar-outline"
-                size={20}
-                color={theme.primary}
-              />
-            </View>
-
-            <View style={styles.headingText}>
-              <Text style={styles.searchTitle}>Find a Record</Text>
-              <Text style={styles.searchDescription}>
-                Search using a specific date.
-              </Text>
-            </View>
-          </View>
+        {/* Date search bar */}
+        <View style={styles.searchBar}>
+          <Ionicons
+            name="search-outline"
+            size={21}
+            color={theme.secondaryText}
+          />
 
           <TextInput
             style={styles.searchInput}
-            placeholder="YYYY-MM-DD"
+            placeholder="Search by date"
             placeholderTextColor={theme.secondaryText}
             value={searchDate}
             onChangeText={setSearchDate}
             keyboardType="numbers-and-punctuation"
             maxLength={10}
+            returnKeyType="search"
+            onSubmitEditing={handleSearch}
           />
 
-          <View style={styles.buttonRow}>
-            <TouchableOpacity
-              style={styles.searchButton}
-              onPress={handleSearch}
-              activeOpacity={0.8}
-            >
-              <Ionicons name="search-outline" size={17} color="#FFFFFF" />
-              <Text style={styles.buttonText}>Search</Text>
-            </TouchableOpacity>
+          <TouchableOpacity
+            onPress={handleSearch}
+            activeOpacity={0.7}
+          >
+            <Ionicons
+              name="calendar-outline"
+              size={21}
+              color={theme.secondaryText}
+            />
+          </TouchableOpacity>
+        </View>
 
-            <TouchableOpacity
-              style={styles.clearButton}
-              onPress={clearSearch}
-              activeOpacity={0.8}
-            >
-              <Ionicons
-                name="refresh-outline"
-                size={17}
-                color={theme.text}
-              />
-              <Text style={styles.clearButtonText}>Show All</Text>
-            </TouchableOpacity>
-          </View>
+        {/* Date filters */}
+        <View style={styles.filterRow}>
+          {dateFilters.map((filter) => {
+            const isActive =
+              !isSearching && activeFilter === filter.value;
+
+            return (
+              <TouchableOpacity
+                key={filter.value}
+                style={[
+                  styles.filterButton,
+                  isActive && styles.activeFilterButton,
+                ]}
+                onPress={() => handleFilterChange(filter.value)}
+                activeOpacity={0.8}
+              >
+                <Text
+                  style={[
+                    styles.filterText,
+                    isActive && styles.activeFilterText,
+                  ]}
+                >
+                  {filter.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
         </View>
 
         {/* Records heading */}
         <View style={styles.resultHeader}>
-          <View>
-            <Text style={styles.resultTitle}>
-              {isSearching ? 'Search Results' : 'Saved Records'}
-            </Text>
-            <Text style={styles.resultSubtitle}>
-              Your previously recorded activities
-            </Text>
-          </View>
+          <Text style={styles.monthTitle}>
+            {isSearching ? 'Search results' : monthHeading}
+          </Text>
 
-          <View style={styles.countBadge}>
-            <Text style={styles.countText}>
-              {filteredRecords.length}
-            </Text>
-          </View>
+          <Text style={styles.recordCount}>
+            {filteredRecords.length} of {records.length} records
+          </Text>
         </View>
 
         {/* Empty state */}
         {filteredRecords.length === 0 ? (
           <View style={styles.emptyCard}>
-            <View style={styles.emptyIcon}>
-              <Ionicons
-                name="folder-open-outline"
-                size={30}
-                color={theme.primary}
-              />
-            </View>
+            <Ionicons
+              name="folder-open-outline"
+              size={35}
+              color={theme.primary}
+            />
 
-            <Text style={styles.emptyTitle}>No Records Found</Text>
+            <Text style={styles.emptyTitle}>
+              No records found
+            </Text>
 
             <Text style={styles.emptyText}>
               {isSearching
@@ -384,171 +520,274 @@ export default function HistoryScreen() {
             </Text>
           </View>
         ) : (
-          filteredRecords.map(record => (
-            <View style={styles.recordCard} key={record.id}>
-              {/* Record date */}
-              <View style={styles.recordHeader}>
-                <View style={styles.recordDateIcon}>
-                  <Ionicons
-                    name="calendar-outline"
-                    size={18}
-                    color={theme.primary}
-                  />
-                </View>
+          filteredRecords.map((record) => {
+            const isExpanded =
+              expandedRecordId === record.id;
 
-                <View style={styles.dateContent}>
-                  <Text style={styles.dateLabel}>RECORD DATE</Text>
-                  <Text style={styles.date}>{record.date}</Text>
-                </View>
+            const isEditing =
+              editingId === record.id;
 
-                {editingId === record.id && (
-                  <View style={styles.editingBadge}>
-                    <Text style={styles.editingText}>EDITING</Text>
+            return (
+              <View
+                key={record.id}
+                style={styles.recordCard}
+              >
+                {/* Record header */}
+                <TouchableOpacity
+                  style={styles.recordHeader}
+                  onPress={() => handleRecordPress(record)}
+                  activeOpacity={0.8}
+                  disabled={isEditing}
+                >
+                  <View style={styles.dateContent}>
+                    <Text style={styles.dateLabel}>
+                      {formatRecordDate(record.date)}
+                    </Text>
+
+                    <Text style={styles.dateText}>
+                      {formatShortDate(record.date)}
+                    </Text>
                   </View>
+
+                  <Ionicons
+                    name={
+                      isExpanded
+                        ? 'chevron-up'
+                        : 'chevron-forward'
+                    }
+                    size={23}
+                    color={theme.secondaryText}
+                  />
+                </TouchableOpacity>
+
+                {/* Updated Edit form */}
+                {isEditing ? (
+                  <View style={styles.editForm}>
+                    <View style={styles.editHeading}>
+                      <View style={styles.editIconContainer}>
+                        <Ionicons
+                          name="create-outline"
+                          size={22}
+                          color="#21664F"
+                        />
+                      </View>
+
+                      <View style={styles.editHeadingText}>
+                        <Text style={styles.editTitle}>
+                          Edit health record
+                        </Text>
+
+                        <Text style={styles.editSubtitle}>
+                          Update your daily activity details
+                        </Text>
+                      </View>
+                    </View>
+
+                    {/* Steps input */}
+                    <View style={styles.inputGroup}>
+                      <Text style={styles.inputLabel}>
+                        Steps
+                      </Text>
+
+                      <View style={styles.inputContainer}>
+                        <Ionicons
+                          name="footsteps-outline"
+                          size={20}
+                          color={isDarkMode ? '#8DC9AE' : '#267A58'}
+                        />
+
+                        <TextInput
+                          style={styles.input}
+                          keyboardType="numeric"
+                          value={steps}
+                          onChangeText={setSteps}
+                          placeholder="Enter steps"
+                          placeholderTextColor={theme.secondaryText}
+                        />
+                      </View>
+                    </View>
+
+                    {/* Calories input */}
+                    <View style={styles.inputGroup}>
+                      <Text style={styles.inputLabel}>
+                        Calories burned
+                      </Text>
+
+                      <View style={styles.inputContainer}>
+                        <Ionicons
+                          name="flame-outline"
+                          size={20}
+                          color="#D96A58"
+                        />
+
+                        <TextInput
+                          style={styles.input}
+                          keyboardType="numeric"
+                          value={calories}
+                          onChangeText={setCalories}
+                          placeholder="Enter calories"
+                          placeholderTextColor={theme.secondaryText}
+                        />
+
+                        <Text style={styles.inputUnit}>
+                          kcal
+                        </Text>
+                      </View>
+                    </View>
+
+                    {/* Water input */}
+                    <View style={styles.inputGroup}>
+                      <Text style={styles.inputLabel}>
+                        Water intake
+                      </Text>
+
+                      <View style={styles.inputContainer}>
+                        <Ionicons
+                          name="water-outline"
+                          size={20}
+                          color="#278BCB"
+                        />
+
+                        <TextInput
+                          style={styles.input}
+                          keyboardType="numeric"
+                          value={water}
+                          onChangeText={setWater}
+                          placeholder="Enter water intake"
+                          placeholderTextColor={theme.secondaryText}
+                        />
+
+                        <Text style={styles.inputUnit}>
+                          ml
+                        </Text>
+                      </View>
+                    </View>
+
+                    {/* Form buttons */}
+                    <View style={styles.editActionRow}>
+                      <TouchableOpacity
+                        style={styles.saveButton}
+                        onPress={handleUpdate}
+                        activeOpacity={0.8}
+                      >
+                        <Ionicons
+                          name="checkmark-outline"
+                          size={19}
+                          color="#FFFFFF"
+                        />
+
+                        <Text style={styles.actionText}>
+                          Save changes
+                        </Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={styles.cancelButton}
+                        onPress={cancelEdit}
+                        activeOpacity={0.8}
+                      >
+                        <Text style={styles.cancelText}>
+                          Cancel
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                ) : (
+                  <>
+                    {/* Health metrics */}
+                    <View style={styles.metricsRow}>
+                      <View style={styles.metric}>
+                        <Ionicons
+                          name="footsteps-outline"
+                          size={20}
+                          color="#267A58"
+                        />
+
+                        <Text style={styles.metricValue}>
+                          {record.steps.toLocaleString()}
+                        </Text>
+
+                        <Text style={styles.metricLabel}>
+                          steps
+                        </Text>
+                      </View>
+
+                      <View style={styles.metric}>
+                        <Ionicons
+                          name="flame-outline"
+                          size={20}
+                          color="#D94D56"
+                        />
+
+                        <Text style={styles.metricValue}>
+                          {record.calories.toLocaleString()}
+                        </Text>
+
+                        <Text style={styles.metricLabel}>
+                          kcal
+                        </Text>
+                      </View>
+
+                      <View style={styles.metric}>
+                        <Ionicons
+                          name="water-outline"
+                          size={20}
+                          color="#278BCB"
+                        />
+
+                        <Text style={styles.metricValue}>
+                          {record.water.toLocaleString()}
+                        </Text>
+
+                        <Text style={styles.metricLabel}>
+                          ml
+                        </Text>
+                      </View>
+                    </View>
+
+                    {/* Expandable actions */}
+                    {isExpanded && (
+                      <View style={styles.actionRow}>
+                        <TouchableOpacity
+                          style={styles.editButton}
+                          onPress={() => handleEdit(record)}
+                        >
+                          <Ionicons
+                            name="create-outline"
+                            size={17}
+                            color="#FFFFFF"
+                          />
+
+                          <Text style={styles.actionText}>
+                            Edit record
+                          </Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                          style={styles.deleteButton}
+                          onPress={() => handleDelete(record.id)}
+                        >
+                          <Ionicons
+                            name="trash-outline"
+                            size={17}
+                            color="#FFFFFF"
+                          />
+
+                          <Text style={styles.actionText}>
+                            Delete
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+                    )}
+                  </>
                 )}
               </View>
-
-              {editingId === record.id ? (
-                <View style={styles.editForm}>
-                  <Text style={styles.label}>Steps</Text>
-                  <TextInput
-                    style={styles.input}
-                    keyboardType="numeric"
-                    value={steps}
-                    onChangeText={setSteps}
-                    placeholder="Enter steps"
-                    placeholderTextColor={theme.secondaryText}
-                  />
-
-                  <Text style={styles.label}>Calories Burned (kcal)</Text>
-                  <TextInput
-                    style={styles.input}
-                    keyboardType="numeric"
-                    value={calories}
-                    onChangeText={setCalories}
-                    placeholder="Enter calories"
-                    placeholderTextColor={theme.secondaryText}
-                  />
-
-                  <Text style={styles.label}>Water Intake (ml)</Text>
-                  <TextInput
-                    style={styles.input}
-                    keyboardType="numeric"
-                    value={water}
-                    onChangeText={setWater}
-                    placeholder="Enter water intake"
-                    placeholderTextColor={theme.secondaryText}
-                  />
-
-                  <View style={styles.buttonRow}>
-                    <TouchableOpacity
-                      style={styles.saveButton}
-                      onPress={handleUpdate}
-                      activeOpacity={0.8}
-                    >
-                      <Ionicons
-                        name="checkmark-outline"
-                        size={17}
-                        color="#FFFFFF"
-                      />
-                      <Text style={styles.buttonText}>Save Changes</Text>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                      style={styles.cancelButton}
-                      onPress={cancelEdit}
-                      activeOpacity={0.8}
-                    >
-                      <Text style={styles.buttonText}>Cancel</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              ) : (
-                <>
-                  {/* Steps */}
-                  <View style={styles.metricRow}>
-                    <View style={styles.metricIconSteps}>
-                      <Ionicons
-                        name="footsteps-outline"
-                        size={19}
-                        color={theme.primary}
-                      />
-                    </View>
-
-                    <Text style={styles.metricLabel}>Steps</Text>
-                    <Text style={styles.metricValue}>
-                      {record.steps.toLocaleString()}
-                    </Text>
-                  </View>
-
-                  {/* Calories */}
-                  <View style={styles.metricRow}>
-                    <View style={styles.metricIconCalories}>
-                      <Ionicons
-                        name="flame-outline"
-                        size={19}
-                        color="#D94D56"
-                      />
-                    </View>
-
-                    <Text style={styles.metricLabel}>Calories</Text>
-                    <Text style={styles.metricValue}>
-                      {record.calories.toLocaleString()} kcal
-                    </Text>
-                  </View>
-
-                  {/* Water */}
-                  <View style={styles.metricRow}>
-                    <View style={styles.metricIconWater}>
-                      <Ionicons
-                        name="water-outline"
-                        size={19}
-                        color="#278BCB"
-                      />
-                    </View>
-
-                    <Text style={styles.metricLabel}>Water intake</Text>
-                    <Text style={styles.metricValue}>
-                      {record.water.toLocaleString()} ml
-                    </Text>
-                  </View>
-
-                  {/* Record actions */}
-                  <View style={styles.actionRow}>
-                    <TouchableOpacity
-                      style={styles.editButton}
-                      onPress={() => handleEdit(record)}
-                      activeOpacity={0.8}
-                    >
-                      <Ionicons
-                        name="create-outline"
-                        size={17}
-                        color="#FFFFFF"
-                      />
-                      <Text style={styles.buttonText}>Edit</Text>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                      style={styles.deleteButton}
-                      onPress={() => handleDelete(record.id)}
-                      activeOpacity={0.8}
-                    >
-                      <Ionicons
-                        name="trash-outline"
-                        size={17}
-                        color="#FFFFFF"
-                      />
-                      <Text style={styles.buttonText}>Delete</Text>
-                    </TouchableOpacity>
-                  </View>
-                </>
-              )}
-            </View>
-          ))
+            );
+          })
         )}
       </ScrollView>
 
-      {/* Custom message box */}
+      {/* Existing custom message modal */}
       <MessageModal
         visible={modal.visible}
         title={modal.title}
@@ -562,7 +801,7 @@ export default function HistoryScreen() {
   );
 }
 
-// Styles use the selected app theme.
+// Screen styles
 const createStyles = (theme, isDarkMode) =>
   StyleSheet.create({
     container: {
@@ -571,13 +810,13 @@ const createStyles = (theme, isDarkMode) =>
     },
 
     scrollContent: {
-      paddingHorizontal: 18,
-      paddingTop: 30,
+      paddingHorizontal: 24,
+      paddingTop: 52,
       paddingBottom: 25,
     },
 
     header: {
-      marginBottom: 20,
+      marginBottom: 22,
     },
 
     brand: {
@@ -591,205 +830,93 @@ const createStyles = (theme, isDarkMode) =>
       fontSize: 27,
       fontWeight: 'bold',
       color: theme.text,
-      marginTop: 7,
+      marginTop: 9,
     },
 
-    subtitle: {
-      fontSize: 13,
-      color: theme.secondaryText,
-      marginTop: 5,
-    },
-
-    searchCard: {
-      backgroundColor: theme.card,
-      padding: 16,
-      borderRadius: 18,
-      marginBottom: 23,
-      borderWidth: 1,
-      borderColor: theme.border,
-      elevation: isDarkMode ? 0 : 2,
-    },
-
-    sectionHeading: {
+    searchBar: {
+      height: 51,
       flexDirection: 'row',
       alignItems: 'center',
-      marginBottom: 15,
-    },
-
-    headingIcon: {
-      width: 40,
-      height: 40,
-      borderRadius: 12,
-      backgroundColor: isDarkMode ? '#303A34' : '#E8F0E8',
-      alignItems: 'center',
-      justifyContent: 'center',
-      marginRight: 11,
-    },
-
-    headingText: {
-      flex: 1,
-    },
-
-    searchTitle: {
-      fontSize: 15,
-      fontWeight: 'bold',
-      color: theme.text,
-    },
-
-    searchDescription: {
-      fontSize: 11,
-      color: theme.secondaryText,
-      marginTop: 3,
+      backgroundColor: theme.card,
+      borderWidth: 1,
+      borderColor: theme.border,
+      borderRadius: 15,
+      paddingHorizontal: 15,
+      marginBottom: 16,
+      gap: 12,
     },
 
     searchInput: {
-      backgroundColor: theme.input,
-      borderWidth: 1,
-      borderColor: theme.border,
-      borderRadius: 11,
-      paddingHorizontal: 13,
-      paddingVertical: 12,
+      flex: 1,
       fontSize: 14,
       color: theme.text,
+      paddingVertical: 8,
     },
 
-    buttonRow: {
+    filterRow: {
       flexDirection: 'row',
-      gap: 9,
-      marginTop: 12,
+      gap: 8,
+      marginBottom: 23,
     },
 
-    searchButton: {
+    filterButton: {
       flex: 1,
-      flexDirection: 'row',
-      gap: 6,
+      height: 47,
+      borderRadius: 17,
+      backgroundColor: isDarkMode ? '#303A34' : '#E8EDE5',
+      justifyContent: 'center',
+      alignItems: 'center',
+      paddingHorizontal: 5,
+    },
+
+    activeFilterButton: {
       backgroundColor: theme.primary,
-      paddingVertical: 12,
-      borderRadius: 10,
-      alignItems: 'center',
-      justifyContent: 'center',
     },
 
-    clearButton: {
-      flex: 1,
-      flexDirection: 'row',
-      gap: 6,
-      backgroundColor: theme.input,
-      borderWidth: 1,
-      borderColor: theme.border,
-      paddingVertical: 12,
-      borderRadius: 10,
-      alignItems: 'center',
-      justifyContent: 'center',
+    filterText: {
+      fontSize: 11,
+      fontWeight: '600',
+      color: theme.secondaryText,
     },
 
-    buttonText: {
+    activeFilterText: {
       color: '#FFFFFF',
-      fontSize: 12,
-      fontWeight: 'bold',
-    },
-
-    clearButtonText: {
-      color: theme.text,
-      fontSize: 12,
-      fontWeight: 'bold',
     },
 
     resultHeader: {
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
-      marginBottom: 13,
+      marginBottom: 17,
     },
 
-    resultTitle: {
-      fontSize: 17,
-      fontWeight: 'bold',
-      color: theme.text,
-    },
-
-    resultSubtitle: {
-      fontSize: 11,
-      color: theme.secondaryText,
-      marginTop: 3,
-    },
-
-    countBadge: {
-      minWidth: 32,
-      height: 32,
-      borderRadius: 10,
-      backgroundColor: isDarkMode ? '#303A34' : '#E4EDE2',
-      alignItems: 'center',
-      justifyContent: 'center',
-      paddingHorizontal: 8,
-    },
-
-    countText: {
-      fontSize: 13,
-      fontWeight: 'bold',
-      color: theme.primary,
-    },
-
-    emptyCard: {
-      backgroundColor: theme.card,
-      padding: 24,
-      borderRadius: 17,
-      alignItems: 'center',
-      borderWidth: 1,
-      borderColor: theme.border,
-    },
-
-    emptyIcon: {
-      width: 58,
-      height: 58,
-      borderRadius: 29,
-      backgroundColor: isDarkMode ? '#303A34' : '#E8F0E8',
-      alignItems: 'center',
-      justifyContent: 'center',
-      marginBottom: 12,
-    },
-
-    emptyTitle: {
+    monthTitle: {
       fontSize: 16,
       fontWeight: 'bold',
       color: theme.text,
+      flexShrink: 1,
     },
 
-    emptyText: {
-      fontSize: 12,
+    recordCount: {
+      fontSize: 10,
       color: theme.secondaryText,
-      textAlign: 'center',
-      lineHeight: 19,
-      marginTop: 7,
+      marginLeft: 8,
     },
 
     recordCard: {
       backgroundColor: theme.card,
-      padding: 15,
-      borderRadius: 17,
-      marginBottom: 13,
-      borderWidth: 1,
-      borderColor: theme.border,
-      elevation: isDarkMode ? 0 : 2,
+      borderRadius: 19,
+      paddingHorizontal: 16,
+      paddingVertical: 13,
+      marginBottom: 12,
+      elevation: isDarkMode ? 0 : 1,
     },
 
     recordHeader: {
       flexDirection: 'row',
       alignItems: 'center',
+      justifyContent: 'space-between',
       marginBottom: 13,
-      paddingBottom: 12,
-      borderBottomWidth: 1,
-      borderBottomColor: theme.border,
-    },
-
-    recordDateIcon: {
-      width: 36,
-      height: 36,
-      borderRadius: 11,
-      backgroundColor: isDarkMode ? '#303A34' : '#E8F0E8',
-      alignItems: 'center',
-      justifyContent: 'center',
-      marginRight: 10,
     },
 
     dateContent: {
@@ -797,85 +924,49 @@ const createStyles = (theme, isDarkMode) =>
     },
 
     dateLabel: {
-      fontSize: 9,
-      letterSpacing: 1,
-      color: theme.secondaryText,
-      fontWeight: 'bold',
-    },
-
-    date: {
       fontSize: 14,
       fontWeight: 'bold',
       color: theme.text,
+    },
+
+    dateText: {
+      fontSize: 11,
+      color: theme.secondaryText,
       marginTop: 3,
     },
 
-    editingBadge: {
-      backgroundColor: isDarkMode ? '#303A34' : '#E4EDE2',
-      paddingHorizontal: 9,
-      paddingVertical: 5,
-      borderRadius: 7,
-    },
-
-    editingText: {
-      fontSize: 9,
-      fontWeight: 'bold',
-      color: theme.primary,
-      letterSpacing: 1,
-    },
-
-    metricRow: {
+    metricsRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      marginBottom: 12,
+      justifyContent: 'space-between',
     },
 
-    metricIconSteps: {
-      width: 33,
-      height: 33,
-      borderRadius: 10,
-      backgroundColor: isDarkMode ? '#303A34' : '#E8F0E8',
-      alignItems: 'center',
-      justifyContent: 'center',
-      marginRight: 10,
-    },
-
-    metricIconCalories: {
-      width: 33,
-      height: 33,
-      borderRadius: 10,
-      backgroundColor: isDarkMode ? '#382C2E' : '#FBECEE',
-      alignItems: 'center',
-      justifyContent: 'center',
-      marginRight: 10,
-    },
-
-    metricIconWater: {
-      width: 33,
-      height: 33,
-      borderRadius: 10,
-      backgroundColor: isDarkMode ? '#293641' : '#E8F2FA',
-      alignItems: 'center',
-      justifyContent: 'center',
-      marginRight: 10,
-    },
-
-    metricLabel: {
+    metric: {
       flex: 1,
-      fontSize: 13,
-      color: theme.secondaryText,
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      alignItems: 'center',
+      columnGap: 6,
     },
 
     metricValue: {
-      fontSize: 13,
+      fontSize: 14,
       fontWeight: 'bold',
       color: theme.text,
+    },
+
+    metricLabel: {
+      width: '100%',
+      fontSize: 10,
+      color: theme.secondaryText,
+      marginLeft: 25,
+      marginTop: -1,
     },
 
     actionRow: {
       flexDirection: 'row',
       gap: 9,
-      marginTop: 5,
+      marginTop: 13,
       paddingTop: 12,
       borderTopWidth: 1,
       borderTopColor: theme.border,
@@ -884,66 +975,163 @@ const createStyles = (theme, isDarkMode) =>
     editButton: {
       flex: 1,
       flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
       gap: 6,
       backgroundColor: theme.primary,
       paddingVertical: 11,
       borderRadius: 10,
-      alignItems: 'center',
-      justifyContent: 'center',
     },
 
     deleteButton: {
       flex: 1,
       flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
       gap: 6,
       backgroundColor: '#D9534F',
       paddingVertical: 11,
       borderRadius: 10,
-      alignItems: 'center',
-      justifyContent: 'center',
     },
 
+    actionText: {
+      color: '#FFFFFF',
+      fontSize: 12,
+      fontWeight: 'bold',
+    },
+
+    // Updated Edit Record form styles
     editForm: {
-      paddingTop: 3,
+      backgroundColor: isDarkMode ? theme.card : '#F5F7F2',
+      borderRadius: 17,
+      borderWidth: 1,
+      borderColor: isDarkMode ? theme.border : '#DCE5D9',
+      padding: 16,
+      marginTop: 4,
     },
 
-    label: {
+    editHeading: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginBottom: 20,
+    },
+
+    editIconContainer: {
+      width: 43,
+      height: 43,
+      borderRadius: 13,
+      backgroundColor: isDarkMode ? '#34483C' : '#E2EBDF',
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+
+    editHeadingText: {
+      flex: 1,
+      marginLeft: 12,
+    },
+
+    editTitle: {
+      fontSize: 17,
+      fontWeight: 'bold',
+      color: theme.text,
+    },
+
+    editSubtitle: {
+      fontSize: 11,
+      color: theme.secondaryText,
+      marginTop: 4,
+    },
+
+    inputGroup: {
+      marginBottom: 15,
+    },
+
+    inputLabel: {
       fontSize: 12,
       fontWeight: '600',
       color: theme.text,
-      marginBottom: 2,
+      marginBottom: 7,
     },
 
-    input: {
+    inputContainer: {
+      minHeight: 49,
+      flexDirection: 'row',
+      alignItems: 'center',
       backgroundColor: theme.input,
       borderWidth: 1,
       borderColor: theme.border,
-      borderRadius: 10,
-      paddingHorizontal: 12,
-      paddingVertical: 11,
-      marginTop: 5,
-      marginBottom: 13,
+      borderRadius: 11,
+      paddingHorizontal: 13,
+      gap: 10,
+    },
+
+    input: {
+      flex: 1,
       fontSize: 14,
       color: theme.text,
+      paddingVertical: 11,
+    },
+
+    inputUnit: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: theme.secondaryText,
+    },
+
+    editActionRow: {
+      flexDirection: 'row',
+      gap: 10,
+      marginTop: 5,
     },
 
     saveButton: {
-      flex: 1,
+      flex: 1.4,
+      minHeight: 46,
       flexDirection: 'row',
-      gap: 6,
-      backgroundColor: theme.primary,
-      padding: 12,
-      borderRadius: 10,
       alignItems: 'center',
       justifyContent: 'center',
+      gap: 7,
+      backgroundColor: theme.primary,
+      borderRadius: 11,
+      paddingHorizontal: 8,
     },
 
     cancelButton: {
       flex: 1,
-      backgroundColor: '#718096',
-      padding: 12,
-      borderRadius: 10,
+      minHeight: 46,
       alignItems: 'center',
       justifyContent: 'center',
+      backgroundColor: isDarkMode ? '#424B45' : '#E3E8E0',
+      borderRadius: 11,
+      paddingHorizontal: 8,
+    },
+
+    cancelText: {
+      fontSize: 12,
+      fontWeight: 'bold',
+      color: theme.text,
+    },
+
+    emptyCard: {
+      backgroundColor: theme.card,
+      padding: 30,
+      borderRadius: 18,
+      alignItems: 'center',
+      marginTop: 5,
+    },
+
+    emptyTitle: {
+      fontSize: 16,
+      fontWeight: 'bold',
+      color: theme.text,
+      marginTop: 12,
+    },
+
+    emptyText: {
+      fontSize: 12,
+      color: theme.secondaryText,
+      textAlign: 'center',
+      marginTop: 6,
+      lineHeight: 19,
     },
   });

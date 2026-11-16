@@ -1,15 +1,18 @@
 
 import { useState } from 'react';
+
 import {
   View,
   Text,
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  ScrollView,
   Modal,
   Pressable,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
+
 import { useSQLiteContext } from 'expo-sqlite';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -36,11 +39,12 @@ export default function AddRecordScreen() {
     year: 'numeric',
   });
 
-  // Show a message after saving or when an error occurs.
+  // Display a message after saving or when an error occurs.
   const showMessage = (type, title, text) => {
     setMessage({ type, title, text });
   };
 
+  // Save the health record to SQLite.
   const handleSave = async () => {
     if (!steps.trim() || !calories.trim() || !water.trim()) {
       showMessage(
@@ -65,7 +69,11 @@ export default function AddRecordScreen() {
     const values = [record.steps, record.calories, record.water];
 
     // Only allow whole numbers that are zero or above.
-    if (values.some(value => !Number.isInteger(value) || value < 0)) {
+    if (
+      values.some(
+        (value) => !Number.isInteger(value) || value < 0
+      )
+    ) {
       showMessage(
         'warning',
         'Invalid Information',
@@ -125,141 +133,147 @@ export default function AddRecordScreen() {
 
   return (
     <>
-      <ScrollView
+      <KeyboardAvoidingView
         style={styles.container}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        {/* Screen heading */}
-        <Text style={styles.title}>Add Record</Text>
-        <Text style={styles.subtitle}>
-          Record your daily activities and keep track of your progress.
-        </Text>
+        <View style={styles.content}>
+          {/* Screen heading */}
+          <Text style={styles.title}>Add Record</Text>
 
-        {/* Current date */}
-        <View style={styles.dateCard}>
-          <View style={styles.dateIcon}>
-            <Ionicons
-              name="calendar-outline"
-              size={22}
-              color={theme.primary}
-            />
-          </View>
+          <Text style={styles.subtitle}>
+            Record your daily activities and keep track of your progress.
+          </Text>
 
-          <View style={styles.dateInfo}>
-            <Text style={styles.dateLabel}>RECORD DATE</Text>
-            <Text style={styles.dateValue}>{formattedDate}</Text>
-          </View>
-        </View>
-
-        <Text style={styles.sectionTitle}>Daily Activities</Text>
-
-        {/* Steps */}
-        <View style={styles.inputCard}>
-          <View style={styles.inputHeader}>
-            <View style={styles.stepsIcon}>
+          {/* Current date */}
+          <View style={styles.dateCard}>
+            <View style={styles.dateIcon}>
               <Ionicons
-                name="footsteps-outline"
-                size={22}
+                name="calendar-outline"
+                size={21}
                 color={theme.primary}
               />
             </View>
 
-            <View style={styles.inputInfo}>
-              <Text style={styles.inputTitle}>Steps Walked</Text>
-              <Text style={styles.inputDescription}>
-                Total steps taken today
-              </Text>
+            <View style={styles.dateInfo}>
+              <Text style={styles.dateLabel}>RECORD DATE</Text>
+              <Text style={styles.dateValue}>{formattedDate}</Text>
             </View>
           </View>
 
-          <TextInput
-            style={styles.input}
-            placeholder="Enter your steps"
-            placeholderTextColor={theme.secondaryText}
-            keyboardType="numeric"
-            value={steps}
-            onChangeText={setSteps}
-          />
-        </View>
+          {/* Activity section */}
+          <Text style={styles.sectionTitle}>Daily Activities</Text>
 
-        {/* Calories */}
-        <View style={styles.inputCard}>
-          <View style={styles.inputHeader}>
-            <View style={styles.calorieIcon}>
-              <Ionicons
-                name="flame-outline"
-                size={22}
-                color="#D94D56"
-              />
+          {/* Steps */}
+          <View style={styles.inputCard}>
+            <View style={styles.inputHeader}>
+              <View style={styles.stepsIcon}>
+                <Ionicons
+                  name="footsteps-outline"
+                  size={22}
+                  color={theme.primary}
+                />
+              </View>
+
+              <View style={styles.inputInfo}>
+                <Text style={styles.inputTitle}>Steps Walked</Text>
+                <Text style={styles.inputDescription}>
+                  Total steps taken today
+                </Text>
+              </View>
             </View>
 
-            <View style={styles.inputInfo}>
-              <Text style={styles.inputTitle}>Calories Burned</Text>
-              <Text style={styles.inputDescription}>
-                Energy used during activities
-              </Text>
-            </View>
+            <TextInput
+              style={styles.input}
+              placeholder="Enter your steps"
+              placeholderTextColor={theme.secondaryText}
+              keyboardType="numeric"
+              value={steps}
+              onChangeText={setSteps}
+            />
           </View>
 
-          <TextInput
-            style={styles.input}
-            placeholder="Enter calories burned"
-            placeholderTextColor={theme.secondaryText}
-            keyboardType="numeric"
-            value={calories}
-            onChangeText={setCalories}
-          />
-        </View>
+          {/* Calories */}
+          <View style={styles.inputCard}>
+            <View style={styles.inputHeader}>
+              <View style={styles.calorieIcon}>
+                <Ionicons
+                  name="flame-outline"
+                  size={22}
+                  color="#D94D56"
+                />
+              </View>
 
-        {/* Water */}
-        <View style={styles.inputCard}>
-          <View style={styles.inputHeader}>
-            <View style={styles.waterIcon}>
-              <Ionicons
-                name="water-outline"
-                size={22}
-                color="#278BCB"
-              />
+              <View style={styles.inputInfo}>
+                <Text style={styles.inputTitle}>Calories Burned</Text>
+                <Text style={styles.inputDescription}>
+                  Energy used during activities
+                </Text>
+              </View>
             </View>
 
-            <View style={styles.inputInfo}>
-              <Text style={styles.inputTitle}>Water Intake</Text>
-              <Text style={styles.inputDescription}>
-                Total water consumed today
-              </Text>
-            </View>
+            <TextInput
+              style={styles.input}
+              placeholder="Enter calories burned"
+              placeholderTextColor={theme.secondaryText}
+              keyboardType="numeric"
+              value={calories}
+              onChangeText={setCalories}
+            />
           </View>
 
-          <TextInput
-            style={styles.input}
-            placeholder="Enter water intake (ml)"
-            placeholderTextColor={theme.secondaryText}
-            keyboardType="numeric"
-            value={water}
-            onChangeText={setWater}
-          />
+          {/* Water */}
+          <View style={styles.inputCard}>
+            <View style={styles.inputHeader}>
+              <View style={styles.waterIcon}>
+                <Ionicons
+                  name="water-outline"
+                  size={22}
+                  color="#278BCB"
+                />
+              </View>
+
+              <View style={styles.inputInfo}>
+                <Text style={styles.inputTitle}>Water Intake</Text>
+                <Text style={styles.inputDescription}>
+                  Total water consumed today
+                </Text>
+              </View>
+            </View>
+
+            <TextInput
+              style={styles.input}
+              placeholder="Enter water intake (ml)"
+              placeholderTextColor={theme.secondaryText}
+              keyboardType="numeric"
+              value={water}
+              onChangeText={setWater}
+            />
+          </View>
+
+          {/* Save record */}
+          <TouchableOpacity
+            style={styles.saveButton}
+            onPress={handleSave}
+            activeOpacity={0.8}
+          >
+            <Ionicons
+              name="checkmark-circle-outline"
+              size={21}
+              color="#FFFFFF"
+            />
+
+            <Text style={styles.saveButtonText}>
+              Save Health Record
+            </Text>
+          </TouchableOpacity>
+
+          {/* Footer */}
+          <Text style={styles.footerText}>
+            Your health information is saved securely on your device.
+          </Text>
         </View>
-
-        {/* Save record */}
-        <TouchableOpacity
-          style={styles.saveButton}
-          onPress={handleSave}
-          activeOpacity={0.8}
-        >
-          <Ionicons
-            name="checkmark-circle-outline"
-            size={21}
-            color="#FFFFFF"
-          />
-          <Text style={styles.saveButtonText}>Save Health Record</Text>
-        </TouchableOpacity>
-
-        <Text style={styles.footerText}>
-          Your health information is saved securely on your device.
-        </Text>
-      </ScrollView>
+      </KeyboardAvoidingView>
 
       {/* Custom message box */}
       <Modal
@@ -275,7 +289,9 @@ export default function AddRecordScreen() {
                 <View
                   style={[
                     styles.messageIcon,
-                    { backgroundColor: currentMessage.background },
+                    {
+                      backgroundColor: currentMessage.background,
+                    },
                   ]}
                 >
                   <Ionicons
@@ -296,11 +312,15 @@ export default function AddRecordScreen() {
                 <Pressable
                   style={[
                     styles.messageButton,
-                    { backgroundColor: currentMessage.button },
+                    {
+                      backgroundColor: currentMessage.button,
+                    },
                   ]}
                   onPress={() => setMessage(null)}
                 >
-                  <Text style={styles.messageButtonText}>Got it</Text>
+                  <Text style={styles.messageButtonText}>
+                    Got it
+                  </Text>
                 </Pressable>
               </>
             )}
@@ -311,203 +331,234 @@ export default function AddRecordScreen() {
   );
 }
 
-const createStyles = (theme, isDarkMode) => StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: theme.background,
-  },
-  scrollContent: {
-    paddingHorizontal: 18,
-    paddingTop: 35,
-    paddingBottom: 30,
-  },
-  title: {
-    fontSize: 27,
-    fontWeight: 'bold',
-    color: theme.text,
-  },
-  subtitle: {
-    fontSize: 13,
-    color: theme.secondaryText,
-    lineHeight: 20,
-    marginTop: 6,
-    marginBottom: 23,
-  },
-  dateCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: theme.card,
-    borderRadius: 17,
-    padding: 15,
-    borderWidth: 1,
-    borderColor: theme.border,
-    elevation: isDarkMode ? 0 : 2,
-  },
-  dateIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 13,
-    backgroundColor: isDarkMode ? '#293B36' : '#E8F0E5',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  dateInfo: {
-    flex: 1,
-    marginLeft: 12,
-  },
-  dateLabel: {
-    fontSize: 10,
-    fontWeight: 'bold',
-    letterSpacing: 1,
-    color: theme.secondaryText,
-  },
-  dateValue: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: theme.text,
-    marginTop: 5,
-  },
-  sectionTitle: {
-    fontSize: 17,
-    fontWeight: 'bold',
-    color: theme.text,
-    marginTop: 25,
-    marginBottom: 13,
-  },
-  inputCard: {
-    backgroundColor: theme.card,
-    borderRadius: 17,
-    padding: 16,
-    marginBottom: 13,
-    borderWidth: 1,
-    borderColor: theme.border,
-    elevation: isDarkMode ? 0 : 2,
-  },
-  inputHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 14,
-  },
-  stepsIcon: {
-    width: 43,
-    height: 43,
-    borderRadius: 13,
-    backgroundColor: isDarkMode ? '#293B36' : '#E8F0E5',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  calorieIcon: {
-    width: 43,
-    height: 43,
-    borderRadius: 13,
-    backgroundColor: isDarkMode ? '#382629' : '#FCEBED',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  waterIcon: {
-    width: 43,
-    height: 43,
-    borderRadius: 13,
-    backgroundColor: isDarkMode ? '#23323D' : '#E8F4FA',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  inputInfo: {
-    flex: 1,
-    marginLeft: 12,
-  },
-  inputTitle: {
-    fontSize: 15,
-    fontWeight: 'bold',
-    color: theme.text,
-  },
-  inputDescription: {
-    fontSize: 12,
-    color: theme.secondaryText,
-    marginTop: 4,
-  },
-  input: {
-    backgroundColor: theme.input,
-    borderWidth: 1,
-    borderColor: theme.border,
-    borderRadius: 11,
-    paddingHorizontal: 13,
-    paddingVertical: 13,
-    fontSize: 15,
-    color: theme.text,
-  },
-  saveButton: {
-    backgroundColor: isDarkMode ? '#287D70' : '#21664F',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 13,
-    paddingVertical: 15,
-    marginTop: 7,
-    gap: 9,
-  },
-  saveButtonText: {
-    color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: 'bold',
-  },
-  footerText: {
-    fontSize: 11,
-    color: theme.secondaryText,
-    textAlign: 'center',
-    marginTop: 15,
-    lineHeight: 18,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.55)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 25,
-  },
-  messageCard: {
-    width: '100%',
-    maxWidth: 350,
-    backgroundColor: theme.card,
-    borderRadius: 22,
-    paddingHorizontal: 24,
-    paddingTop: 28,
-    paddingBottom: 24,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: theme.border,
-  },
-  messageIcon: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 17,
-  },
-  messageTitle: {
-    fontSize: 21,
-    fontWeight: 'bold',
-    color: theme.text,
-    textAlign: 'center',
-  },
-  messageText: {
-    fontSize: 14,
-    color: theme.secondaryText,
-    textAlign: 'center',
-    lineHeight: 22,
-    marginTop: 10,
-    marginBottom: 22,
-  },
-  messageButton: {
-    width: '100%',
-    paddingVertical: 13,
-    borderRadius: 12,
-    alignItems: 'center',
-  },
-  messageButtonText: {
-    color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: 'bold',
-  },
-});
+const createStyles = (theme, isDarkMode) =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: theme.background,
+    },
+
+    content: {
+      flex: 1,
+      paddingHorizontal: 16,
+      paddingTop: 12,
+      paddingBottom: 8,
+    },
+
+    title: {
+      fontSize: 24,
+      fontWeight: 'bold',
+      color: theme.text,
+    },
+
+    subtitle: {
+      fontSize: 11,
+      color: theme.secondaryText,
+      lineHeight: 16,
+      marginTop: 3,
+      marginBottom: 14,
+    },
+
+    dateCard: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: theme.card,
+      borderRadius: 14,
+      padding: 11,
+      borderWidth: 1,
+      borderColor: theme.border,
+      elevation: isDarkMode ? 0 : 2,
+    },
+
+    dateIcon: {
+      width: 40,
+      height: 40,
+      borderRadius: 11,
+      backgroundColor: isDarkMode ? '#293B36' : '#E8F0E5',
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+
+    dateInfo: {
+      flex: 1,
+      marginLeft: 11,
+    },
+
+    dateLabel: {
+      fontSize: 9,
+      fontWeight: 'bold',
+      letterSpacing: 1,
+      color: theme.secondaryText,
+    },
+
+    dateValue: {
+      fontSize: 13,
+      fontWeight: '600',
+      color: theme.text,
+      marginTop: 4,
+    },
+
+    sectionTitle: {
+      fontSize: 16,
+      fontWeight: 'bold',
+      color: theme.text,
+      marginTop: 16,
+      marginBottom: 9,
+    },
+
+    inputCard: {
+      backgroundColor: theme.card,
+      borderRadius: 14,
+      padding: 12,
+      marginBottom: 9,
+      borderWidth: 1,
+      borderColor: theme.border,
+      elevation: isDarkMode ? 0 : 2,
+    },
+
+    inputHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginBottom: 9,
+    },
+
+    stepsIcon: {
+      width: 38,
+      height: 38,
+      borderRadius: 11,
+      backgroundColor: isDarkMode ? '#293B36' : '#E8F0E5',
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+
+    calorieIcon: {
+      width: 38,
+      height: 38,
+      borderRadius: 11,
+      backgroundColor: isDarkMode ? '#382629' : '#FCEBED',
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+
+    waterIcon: {
+      width: 38,
+      height: 38,
+      borderRadius: 11,
+      backgroundColor: isDarkMode ? '#23323D' : '#E8F4FA',
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+
+    inputInfo: {
+      flex: 1,
+      marginLeft: 11,
+    },
+
+    inputTitle: {
+      fontSize: 14,
+      fontWeight: 'bold',
+      color: theme.text,
+    },
+
+    inputDescription: {
+      fontSize: 11,
+      color: theme.secondaryText,
+      marginTop: 3,
+    },
+
+    input: {
+      backgroundColor: theme.input,
+      borderWidth: 1,
+      borderColor: theme.border,
+      borderRadius: 10,
+      paddingHorizontal: 12,
+      paddingVertical: 9,
+      fontSize: 14,
+      color: theme.text,
+    },
+
+    saveButton: {
+      backgroundColor: isDarkMode ? '#287D70' : '#21664F',
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderRadius: 12,
+      paddingVertical: 12,
+      marginTop: 5,
+      gap: 8,
+    },
+
+    saveButtonText: {
+      color: '#FFFFFF',
+      fontSize: 14,
+      fontWeight: 'bold',
+    },
+
+    footerText: {
+      fontSize: 10,
+      color: theme.secondaryText,
+      textAlign: 'center',
+      marginTop: 9,
+      lineHeight: 14,
+    },
+
+    // Message modal styles
+    modalOverlay: {
+      flex: 1,
+      backgroundColor: 'rgba(0, 0, 0, 0.55)',
+      justifyContent: 'center',
+      alignItems: 'center',
+      paddingHorizontal: 25,
+    },
+
+    messageCard: {
+      width: '100%',
+      maxWidth: 350,
+      backgroundColor: theme.card,
+      borderRadius: 22,
+      paddingHorizontal: 24,
+      paddingTop: 28,
+      paddingBottom: 24,
+      alignItems: 'center',
+      borderWidth: 1,
+      borderColor: theme.border,
+    },
+
+    messageIcon: {
+      width: 72,
+      height: 72,
+      borderRadius: 36,
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginBottom: 17,
+    },
+
+    messageTitle: {
+      fontSize: 21,
+      fontWeight: 'bold',
+      color: theme.text,
+      textAlign: 'center',
+    },
+
+    messageText: {
+      fontSize: 14,
+      color: theme.secondaryText,
+      textAlign: 'center',
+      lineHeight: 22,
+      marginTop: 10,
+      marginBottom: 22,
+    },
+
+    messageButton: {
+      width: '100%',
+      paddingVertical: 13,
+      borderRadius: 12,
+      alignItems: 'center',
+    },
+
+    messageButtonText: {
+      color: '#FFFFFF',
+      fontSize: 15,
+      fontWeight: 'bold',
+    },
+  });
