@@ -5,11 +5,13 @@ import {
   Text,
   View,
   ScrollView,
+  Pressable,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { useSQLiteContext } from 'expo-sqlite';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import DateTimePicker from '@react-native-community/datetimepicker';
 
 import { getHealthRecords } from '../database/database';
 import { useTheme } from '../context/ThemeContext';
@@ -28,6 +30,15 @@ function getDateKey(date) {
   ].join('-');
 }
 
+// Display a date in a readable format.
+function formatDisplayDate(date) {
+  return date.toLocaleDateString('en-GB', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  });
+}
+
 // Display large step counts in a shorter format.
 function formatSteps(steps) {
   if (steps >= 1000) {
@@ -43,109 +54,109 @@ export default function HomeScreen() {
 
   const styles = createStyles(theme, isDarkMode);
 
-  const [todayData, setTodayData] = useState({
-    steps: 0,
-    calories: 0,
-    water: 0,
-  });
-
-  const [weeklyData, setWeeklyData] = useState([]);
-  const [todayDate, setTodayDate] = useState(() =>
-    new Date().toLocaleDateString('en-GB', {
-      day: 'numeric',
-      month: 'long',
-      year: 'numeric',
-    })
-  );
+  const [records, setRecords] = useState([]);
+  const [selectedDate, setSelectedDate] = useState(() => new Date());
+  const [showDatePicker, setShowDatePicker] = useState(false);
   const [loadError, setLoadError] = useState(null);
 
   // Load dashboard records whenever Home is opened.
   useFocusEffect(
     useCallback(() => {
+      let isActive = true;
+
       async function loadDashboardData() {
         try {
-          const records = await getHealthRecords(database);
-          setLoadError(null);
+          const healthRecords = await getHealthRecords(database);
 
-          const today = new Date();
-          const todayKey = getDateKey(today);
-
-          setTodayDate(
-            today.toLocaleDateString('en-GB', {
-              day: 'numeric',
-              month: 'long',
-              year: 'numeric',
-            })
-          );
-
-          // Calculate today's totals.
-          const todaysRecords = records.filter(
-            record => record.date === todayKey
-          );
-
-          const totals = todaysRecords.reduce(
-            (result, record) => ({
-              steps: result.steps + record.steps,
-              calories: result.calories + record.calories,
-              water: result.water + record.water,
-            }),
-            { steps: 0, calories: 0, water: 0 }
-          );
-
-          setTodayData(totals);
-
-          // Prepare the last seven days for the chart.
-          const lastSevenDays = [];
-
-          for (let i = 6; i >= 0; i--) {
-            const date = new Date(
-              today.getFullYear(),
-              today.getMonth(),
-              today.getDate() - i
-            );
-
-            const dateKey = getDateKey(date);
-
-            const daySteps = records
-              .filter(record => record.date === dateKey)
-              .reduce((total, record) => total + record.steps, 0);
-
-            lastSevenDays.push({
-              date: dateKey,
-              label: date.toLocaleDateString('en', {
-                weekday: 'short',
-              }),
-              steps: daySteps,
-              isToday: dateKey === todayKey,
-            });
+          if (isActive) {
+            setRecords(healthRecords);
+            setLoadError(null);
           }
-
-          setWeeklyData(lastSevenDays);
         } catch (error) {
           console.error('Error loading dashboard data:', error);
-          setLoadError(
-            'Your dashboard data could not be loaded. Reopen this screen to try again.'
-          );
+
+          if (isActive) {
+            setLoadError(
+              'Your dashboard data could not be loaded. Reopen this screen to try again.'
+            );
+          }
         }
       }
 
       loadDashboardData();
+
+      return () => {
+        isActive = false;
+      };
     }, [database])
   );
 
+  // Handle date selection from the calendar.
+  const handleDateChange = (event, date) => {
+    if (date) {
+      setSelectedDate(date);
+    }
+
+    setShowDatePicker(false);
+  };
+
+  const selectedDateKey = getDateKey(selectedDate);
+  const todayKey = getDateKey(new Date());
+  const isToday = selectedDateKey === todayKey;
+
+  // Calculate totals for the selected date.
+  const selectedRecords = records.filter(
+    record => record.date === selectedDateKey
+  );
+
+  const selectedData = selectedRecords.reduce(
+    (result, record) => ({
+      steps: result.steps + record.steps,
+      calories: result.calories + record.calories,
+      water: result.water + record.water,
+    }),
+    { steps: 0, calories: 0, water: 0 }
+  );
+
+  // Prepare the seven days ending on the selected date.
+  const weeklyData = [];
+
+  for (let i = 6; i >= 0; i--) {
+    const date = new Date(
+      selectedDate.getFullYear(),
+      selectedDate.getMonth(),
+      selectedDate.getDate() - i
+    );
+
+    const dateKey = getDateKey(date);
+
+    const daySteps = records
+      .filter(record => record.date === dateKey)
+      .reduce((total, record) => total + record.steps, 0);
+
+    weeklyData.push({
+      date: dateKey,
+      label: date.toLocaleDateString('en', {
+        weekday: 'short',
+      }),
+      steps: daySteps,
+      isSelected: dateKey === selectedDateKey,
+    });
+  }
+
   // Calculate progress towards daily goals.
   const stepPercentage = Math.min(
-    (todayData.steps / STEP_GOAL) * 100,
+    (selectedData.steps / STEP_GOAL) * 100,
     100
   );
 
   const waterPercentage = Math.min(
-    (todayData.water / WATER_GOAL) * 100,
+    (selectedData.water / WATER_GOAL) * 100,
     100
   );
 
   const caloriePercentage = Math.min(
-    (todayData.calories / CALORIE_GOAL) * 100,
+    (selectedData.calories / CALORIE_GOAL) * 100,
     100
   );
 
@@ -162,17 +173,19 @@ export default function HomeScreen() {
   );
 
   const remainingSteps = Math.max(
-    STEP_GOAL - todayData.steps,
+    STEP_GOAL - selectedData.steps,
     0
   );
 
-  // Choose an encouragement message based on today's activity.
+  // Choose an encouragement message based on the selected day's activity.
   let encouragementMessage;
 
-  if (remainingSteps === 0) {
+  if (selectedData.steps >= STEP_GOAL) {
     encouragementMessage = "You've reached your daily step goal. Great work!";
-  } else if (todayData.steps === 0) {
-    encouragementMessage = 'Record your first activity and start your day.';
+  } else if (selectedRecords.length === 0) {
+    encouragementMessage = 'No activity has been recorded for this date yet.';
+  } else if (selectedData.steps === 0) {
+    encouragementMessage = 'Record your first activity to track your progress.';
   } else {
     encouragementMessage = `Just ${remainingSteps.toLocaleString()} steps to your daily goal.`;
   }
@@ -204,18 +217,43 @@ export default function HomeScreen() {
           </View>
         )}
 
-        {/* Today's date */}
-        <View style={styles.dateRow}>
-          <Text style={styles.dateText}>
-            Today, {todayDate}
-          </Text>
+        {/* Select dashboard date */}
+        <Pressable
+          style={styles.dateRow}
+          onPress={() => setShowDatePicker(true)}
+          accessibilityRole="button"
+          accessibilityLabel={`Select date. Currently showing ${formatDisplayDate(selectedDate)}`}
+        >
+          <View>
+            <Text style={styles.dateText}>
+              {isToday ? 'Today' : 'Selected date'}, {formatDisplayDate(selectedDate)}
+            </Text>
+            {!isToday && (
+              <Text style={styles.dateHint}>
+                Viewing records for this date
+              </Text>
+            )}
+          </View>
 
           <Ionicons
             name="calendar-outline"
-            size={20}
-            color={theme.secondaryText}
+            size={22}
+            color={theme.primary}
           />
-        </View>
+        </Pressable>
+
+        {/* Calendar picker */}
+        {showDatePicker && (
+          <DateTimePicker
+            value={selectedDate}
+            mode="date"
+            display="default"
+            onValueChange={(event, date) => {
+              handleDateChange(event, date);
+            }}
+            onDismiss={() => setShowDatePicker(false)}
+          />
+        )}
 
         {/* Main steps card */}
         <View style={styles.stepsCard}>
@@ -231,7 +269,7 @@ export default function HomeScreen() {
             </View>
 
             <Text style={styles.stepsValue}>
-              {todayData.steps.toLocaleString()}
+              {selectedData.steps.toLocaleString()}
             </Text>
 
             <Text style={styles.stepsGoal}>
@@ -263,7 +301,7 @@ export default function HomeScreen() {
 
             <View style={styles.valueRow}>
               <Text style={styles.activityValue}>
-                {todayData.water.toLocaleString()}
+                {selectedData.water.toLocaleString()}
               </Text>
 
               <Text style={styles.unit}>ml</Text>
@@ -298,7 +336,7 @@ export default function HomeScreen() {
 
             <View style={styles.valueRow}>
               <Text style={styles.activityValue}>
-                {todayData.calories.toLocaleString()}
+                {selectedData.calories.toLocaleString()}
               </Text>
 
               <Text style={styles.unit}>kcal</Text>
@@ -328,7 +366,10 @@ export default function HomeScreen() {
               </Text>
 
               <Text style={styles.weekSubtitle}>
-                Daily steps · Last 7 days
+                Daily steps · 7 days ending {selectedDate.toLocaleDateString('en-GB', {
+                  day: 'numeric',
+                  month: 'short',
+                })}
               </Text>
             </View>
 
@@ -354,7 +395,7 @@ export default function HomeScreen() {
                       styles.chartBar,
                       {
                         height: barHeight,
-                        backgroundColor: day.isToday
+                        backgroundColor: day.isSelected
                           ? theme.primary
                           : theme.primarySoft,
                       },
@@ -364,7 +405,7 @@ export default function HomeScreen() {
                   <Text
                     style={[
                       styles.chartLabel,
-                      day.isToday && styles.todayChartLabel,
+                      day.isSelected && styles.todayChartLabel,
                     ]}
                   >
                     {day.label}
@@ -454,12 +495,19 @@ const createStyles = (theme, isDarkMode) => StyleSheet.create({
     alignItems: 'center',
     marginTop: 20,
     marginBottom: 14,
+    paddingVertical: 4,
   },
 
   dateText: {
     fontSize: 13,
     fontWeight: '600',
     color: theme.secondaryText,
+  },
+
+  dateHint: {
+    fontSize: 11,
+    color: theme.primary,
+    marginTop: 4,
   },
 
   errorCard: {

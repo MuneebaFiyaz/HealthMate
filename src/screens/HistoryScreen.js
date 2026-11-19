@@ -16,6 +16,7 @@ import { useSQLiteContext } from 'expo-sqlite';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import DateTimePicker from '@react-native-community/datetimepicker';
 
 import {
   getHealthRecords,
@@ -37,6 +38,32 @@ const dateFilters = [
 const parseDate = (dateString) => {
   const [year, month, day] = dateString.split('-').map(Number);
   return new Date(year, month - 1, day);
+};
+
+// Convert a Date object into YYYY-MM-DD.
+const formatDateForSearch = (date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+
+  return `${year}-${month}-${day}`;
+};
+
+// Check whether a date string is a valid calendar date.
+const isValidDateString = (dateString) => {
+  const datePattern = /^\d{4}-\d{2}-\d{2}$/;
+
+  if (!datePattern.test(dateString)) {
+    return false;
+  }
+
+  const parsedDate = parseDate(dateString);
+
+  return (
+    parsedDate.getFullYear() === Number(dateString.slice(0, 4)) &&
+    parsedDate.getMonth() + 1 === Number(dateString.slice(5, 7)) &&
+    parsedDate.getDate() === Number(dateString.slice(8, 10))
+  );
 };
 
 // Format a date for the record card.
@@ -91,6 +118,7 @@ export default function HistoryScreen() {
   const [searchDate, setSearchDate] = useState('');
   const [activeFilter, setActiveFilter] = useState('all');
   const [isSearching, setIsSearching] = useState(false);
+  const [showDatePicker, setShowDatePicker] = useState(false);
 
   const [expandedRecordId, setExpandedRecordId] = useState(null);
   const [editingId, setEditingId] = useState(null);
@@ -170,9 +198,24 @@ export default function HistoryScreen() {
     setIsRefreshing(false);
   };
 
+  // Open the calendar and select a date.
+  const handleDateChange = (event, selectedDate) => {
+    setShowDatePicker(false);
+
+    if (event.type === 'set' && selectedDate) {
+      const formattedDate = formatDateForSearch(selectedDate);
+
+      setSearchDate(formattedDate);
+      setIsSearching(true);
+      setActiveFilter('all');
+      setExpandedRecordId(null);
+    }
+  };
+
   // Search for a record using YYYY-MM-DD.
   const handleSearch = () => {
     Keyboard.dismiss();
+
     const date = searchDate.trim();
 
     if (!date) {
@@ -184,27 +227,10 @@ export default function HistoryScreen() {
       return;
     }
 
-    const datePattern = /^\d{4}-\d{2}-\d{2}$/;
-
-    if (!datePattern.test(date)) {
+    if (!isValidDateString(date)) {
       showMessage(
         'Invalid Date',
-        'Please enter the date in YYYY-MM-DD format.',
-        'warning'
-      );
-      return;
-    }
-
-    const parsedDate = parseDate(date);
-
-    if (
-      parsedDate.getFullYear() !== Number(date.slice(0, 4)) ||
-      parsedDate.getMonth() + 1 !== Number(date.slice(5, 7)) ||
-      parsedDate.getDate() !== Number(date.slice(8, 10))
-    ) {
-      showMessage(
-        'Invalid Date',
-        'Please enter a valid calendar date.',
+        'Please enter a valid date in YYYY-MM-DD format.',
         'warning'
       );
       return;
@@ -220,6 +246,7 @@ export default function HistoryScreen() {
     setIsSearching(false);
     setActiveFilter('all');
     setExpandedRecordId(null);
+    setShowDatePicker(false);
   };
 
   // Select a date filter.
@@ -233,6 +260,7 @@ export default function HistoryScreen() {
     setIsSearching(false);
     setSearchDate('');
     setExpandedRecordId(null);
+    setShowDatePicker(false);
   };
 
   // Filter records based on the selected option.
@@ -483,6 +511,24 @@ export default function HistoryScreen() {
             accessibilityHint="Enter a date in year, month, day format"
           />
 
+          {/* Calendar button */}
+          <TouchableOpacity
+            style={styles.datePickerButton}
+            onPress={() => {
+              Keyboard.dismiss();
+              setShowDatePicker(true);
+            }}
+            activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel="Choose search date from calendar"
+          >
+            <Ionicons
+              name="calendar-outline"
+              size={22}
+              color={theme.primary}
+            />
+          </TouchableOpacity>
+
           <TouchableOpacity
             style={styles.searchButton}
             onPress={handleSearch}
@@ -493,6 +539,28 @@ export default function HistoryScreen() {
             <Text style={styles.searchButtonText}>Search</Text>
           </TouchableOpacity>
         </View>
+
+        {/* Native date picker */}
+        {showDatePicker && (
+          <DateTimePicker
+          value={
+            isValidDateString(searchDate.trim())
+              ? parseDate(searchDate.trim())
+              : new Date()
+          }
+          mode="date"
+          display="default"
+          onValueChange={(event, selectedDate) => {
+            if (selectedDate) {
+              handleDateChange(
+                { type: 'set' },
+                selectedDate
+              );
+            }
+          }}
+          onDismiss={() => setShowDatePicker(false)}
+        />
+        )}
 
         {/* Date filters */}
         <View style={styles.filterRow}>
@@ -925,6 +993,13 @@ const createStyles = (theme, isDarkMode) =>
       fontSize: 15,
       color: theme.text,
       paddingVertical: 10,
+    },
+
+    datePickerButton: {
+      width: 40,
+      height: 44,
+      justifyContent: 'center',
+      alignItems: 'center',
     },
 
     searchButton: {
