@@ -9,6 +9,7 @@ import {
 import { useFocusEffect } from '@react-navigation/native';
 import { useSQLiteContext } from 'expo-sqlite';
 import { Ionicons } from '@expo/vector-icons';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { getHealthRecords } from '../database/database';
 import { useTheme } from '../context/ThemeContext';
@@ -49,7 +50,14 @@ export default function HomeScreen() {
   });
 
   const [weeklyData, setWeeklyData] = useState([]);
-  const [todayDate, setTodayDate] = useState('');
+  const [todayDate, setTodayDate] = useState(() =>
+    new Date().toLocaleDateString('en-GB', {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+    })
+  );
+  const [loadError, setLoadError] = useState(null);
 
   // Load dashboard records whenever Home is opened.
   useFocusEffect(
@@ -57,6 +65,7 @@ export default function HomeScreen() {
       async function loadDashboardData() {
         try {
           const records = await getHealthRecords(database);
+          setLoadError(null);
 
           const today = new Date();
           const todayKey = getDateKey(today);
@@ -114,6 +123,9 @@ export default function HomeScreen() {
           setWeeklyData(lastSevenDays);
         } catch (error) {
           console.error('Error loading dashboard data:', error);
+          setLoadError(
+            'Your dashboard data could not be loaded. Reopen this screen to try again.'
+          );
         }
       }
 
@@ -166,8 +178,9 @@ export default function HomeScreen() {
   }
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       <ScrollView
+        style={styles.screenScrollView}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
@@ -176,9 +189,20 @@ export default function HomeScreen() {
           <Text style={styles.brand}>HEALTHMATE</Text>
           <Text style={styles.title}>Your daily balance</Text>
           <Text style={styles.subtitle}>
-            Keep track of your daily activity.
+            A clear view of your activity and progress.
           </Text>
         </View>
+
+        {loadError && (
+          <View style={styles.errorCard} accessibilityRole="alert">
+            <Ionicons
+              name="alert-circle-outline"
+              size={20}
+              color={theme.danger}
+            />
+            <Text style={styles.errorText}>{loadError}</Text>
+          </View>
+        )}
 
         {/* Today's date */}
         <View style={styles.dateRow}>
@@ -231,7 +255,7 @@ export default function HomeScreen() {
               <Ionicons
                 name="water-outline"
                 size={19}
-                color="#278BCB"
+                color={theme.water}
               />
 
               <Text style={styles.waterTitle}>Water intake</Text>
@@ -264,7 +288,7 @@ export default function HomeScreen() {
               <Ionicons
                 name="flame-outline"
                 size={19}
-                color="#D94D56"
+                color={theme.calories}
               />
 
               <Text style={styles.calorieTitle}>
@@ -331,10 +355,8 @@ export default function HomeScreen() {
                       {
                         height: barHeight,
                         backgroundColor: day.isToday
-                          ? '#21664F'
-                          : isDarkMode
-                            ? '#555555'
-                            : '#DCE9DE',
+                          ? theme.primary
+                          : theme.primarySoft,
                       },
                     ]}
                   />
@@ -359,7 +381,7 @@ export default function HomeScreen() {
             <Ionicons
               name="checkmark"
               size={19}
-              color="#21664F"
+              color={theme.primary}
             />
           </View>
 
@@ -378,7 +400,7 @@ export default function HomeScreen() {
           </View>
         </View>
       </ScrollView>
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -389,55 +411,79 @@ const createStyles = (theme, isDarkMode) => StyleSheet.create({
     backgroundColor: theme.background,
   },
 
+  screenScrollView: {
+    flex: 1,
+  },
+
   scrollContent: {
-    paddingBottom: 25,
+    width: '100%',
+    maxWidth: 680,
+    alignSelf: 'center',
+    paddingHorizontal: 20,
+    paddingBottom: 32,
   },
 
   header: {
-    paddingHorizontal: 22,
-    paddingTop: 35,
+    paddingTop: 16,
   },
 
   brand: {
     fontSize: 12,
     fontWeight: 'bold',
     letterSpacing: 2,
-    color: isDarkMode ? '#8DC9AE' : '#21664F',
+    color: theme.primary,
   },
 
   title: {
-    fontSize: 25,
+    fontSize: 28,
     fontWeight: 'bold',
     color: theme.text,
     marginTop: 7,
   },
 
   subtitle: {
-    fontSize: 13,
+    fontSize: 14,
     color: theme.secondaryText,
-    marginTop: 5,
+    lineHeight: 20,
+    marginTop: 6,
   },
 
   dateRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginHorizontal: 22,
-    marginTop: 17,
-    marginBottom: 15,
+    marginTop: 20,
+    marginBottom: 14,
   },
 
   dateText: {
-    fontSize: 14,
+    fontSize: 13,
+    fontWeight: '600',
     color: theme.secondaryText,
   },
 
+  errorCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: theme.dangerSoft,
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 14,
+  },
+
+  errorText: {
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 18,
+    color: theme.danger,
+  },
+
   stepsCard: {
-    backgroundColor: '#21664F',
-    marginHorizontal: 16,
+    backgroundColor: theme.primaryButton,
     padding: 20,
-    borderRadius: 19,
-    minHeight: 125,
+    borderRadius: 22,
+    minHeight: 140,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -459,7 +505,7 @@ const createStyles = (theme, isDarkMode) => StyleSheet.create({
   },
 
   stepsValue: {
-    fontSize: 34,
+    fontSize: 36,
     fontWeight: 'bold',
     color: '#FFFFFF',
     marginTop: 10,
@@ -495,23 +541,22 @@ const createStyles = (theme, isDarkMode) => StyleSheet.create({
 
   activityRow: {
     flexDirection: 'row',
-    marginHorizontal: 16,
-    marginTop: 13,
-    gap: 10,
+    marginTop: 14,
+    gap: 12,
   },
 
   waterCard: {
     flex: 1,
-    backgroundColor: isDarkMode ? theme.card : '#E8F2FA',
-    padding: 13,
-    borderRadius: 17,
+    backgroundColor: theme.waterSoft,
+    padding: 14,
+    borderRadius: 18,
   },
 
   calorieCard: {
     flex: 1,
-    backgroundColor: isDarkMode ? theme.card : '#FBECEE',
-    padding: 13,
-    borderRadius: 17,
+    backgroundColor: theme.caloriesSoft,
+    padding: 14,
+    borderRadius: 18,
   },
 
   activityTitleRow: {
@@ -522,13 +567,13 @@ const createStyles = (theme, isDarkMode) => StyleSheet.create({
 
   waterTitle: {
     fontSize: 11,
-    color: isDarkMode ? theme.text : '#2878B2',
+    color: theme.water,
     fontWeight: '500',
   },
 
   calorieTitle: {
     fontSize: 11,
-    color: isDarkMode ? theme.text : '#B94A50',
+    color: theme.calories,
     fontWeight: '500',
   },
 
@@ -539,7 +584,7 @@ const createStyles = (theme, isDarkMode) => StyleSheet.create({
   },
 
   activityValue: {
-    fontSize: 24,
+    fontSize: 23,
     fontWeight: 'bold',
     color: theme.text,
   },
@@ -566,22 +611,23 @@ const createStyles = (theme, isDarkMode) => StyleSheet.create({
 
   waterProgressFill: {
     height: '100%',
-    backgroundColor: '#278BCB',
+    backgroundColor: theme.water,
     borderRadius: 5,
   },
 
   calorieProgressFill: {
     height: '100%',
-    backgroundColor: '#D94D56',
+    backgroundColor: theme.calories,
     borderRadius: 5,
   },
 
   weekCard: {
     backgroundColor: theme.card,
-    marginHorizontal: 16,
-    marginTop: 13,
-    padding: 15,
-    borderRadius: 19,
+    marginTop: 14,
+    padding: 17,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: theme.border,
   },
 
   weekHeader: {
@@ -591,13 +637,13 @@ const createStyles = (theme, isDarkMode) => StyleSheet.create({
   },
 
   weekTitle: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: 'bold',
     color: theme.text,
   },
 
   weekSubtitle: {
-    fontSize: 11,
+    fontSize: 12,
     color: theme.secondaryText,
     marginTop: 4,
   },
@@ -605,14 +651,14 @@ const createStyles = (theme, isDarkMode) => StyleSheet.create({
   weekAverage: {
     fontSize: 10,
     fontWeight: 'bold',
-    color: isDarkMode ? '#8DC9AE' : '#21664F',
+    color: theme.primary,
   },
 
   chart: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-end',
-    marginTop: 16,
+    marginTop: 20,
     paddingHorizontal: 3,
   },
 
@@ -629,62 +675,60 @@ const createStyles = (theme, isDarkMode) => StyleSheet.create({
   },
 
   chartBar: {
-    width: 17,
-    borderRadius: 6,
+    width: 18,
+    borderRadius: 8,
   },
 
   chartLabel: {
-    fontSize: 10,
+    fontSize: 11,
     color: theme.secondaryText,
     marginTop: 7,
   },
 
   todayChartLabel: {
-    color: isDarkMode ? '#8DC9AE' : '#21664F',
+    color: theme.primary,
     fontWeight: 'bold',
   },
 
- 
-messageCard: {
-  flexDirection: 'row',
-  alignItems: 'center',
-  backgroundColor: isDarkMode ? theme.card : '#EAF0DF',
-  marginHorizontal: 16,
-  marginTop: 10,
-  paddingHorizontal: 12,
-  paddingVertical: 9,
-  borderRadius: 13,
-},
+  messageCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: theme.primarySoft,
+    marginTop: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderRadius: 16,
+  },
 
-messageIcon: {
-  width: 22,
-  height: 22,
-  borderRadius: 7,
-  backgroundColor: '#D5EBAA',
-  alignItems: 'center',
-  justifyContent: 'center',
-  marginRight: 9,
-},
+  messageIcon: {
+    width: 22,
+    height: 22,
+    borderRadius: 7,
+    backgroundColor: theme.primarySoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
 
-messageContent: {
-  flex: 1,
-},
+  messageContent: {
+    flex: 1,
+  },
 
-messageTitle: {
-  fontSize: 12,
-  fontWeight: 'bold',
-  color: theme.text,
-},
+  messageTitle: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: theme.text,
+  },
 
-messageDescription: {
-  fontSize: 11,
-  color: theme.secondaryText,
-  marginTop: 3,
-},
+  messageDescription: {
+    fontSize: 13,
+    color: theme.secondaryText,
+    marginTop: 3,
+  },
 
-messageHint: {
-  fontSize: 10,
-  color: theme.secondaryText,
-  marginTop: 1,
-},
+  messageHint: {
+    fontSize: 11,
+    color: theme.secondaryText,
+    marginTop: 1,
+  },
 });

@@ -10,14 +10,19 @@ import {
   Modal,
   Pressable,
   KeyboardAvoidingView,
+  ScrollView,
+  Keyboard,
+  ActivityIndicator,
   Platform,
 } from 'react-native';
 
 import { useSQLiteContext } from 'expo-sqlite';
 import { Ionicons } from '@expo/vector-icons';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { addHealthRecord } from '../database/database';
 import { useTheme } from '../context/ThemeContext';
+import { parseNonNegativeInteger } from '../utils/healthRecordValidation';
 
 export default function AddRecordScreen() {
   const database = useSQLiteContext();
@@ -29,6 +34,7 @@ export default function AddRecordScreen() {
   const [calories, setCalories] = useState('');
   const [water, setWater] = useState('');
   const [message, setMessage] = useState(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   const today = new Date();
 
@@ -40,12 +46,18 @@ export default function AddRecordScreen() {
   });
 
   // Display a message after saving or when an error occurs.
-  const showMessage = (type, title, text) => {
-    setMessage({ type, title, text });
+  const showMessage = (type, title, text, preview = null) => {
+    setMessage({ type, title, text, preview });
   };
 
   // Save the health record to SQLite.
   const handleSave = async () => {
+    if (isSaving) {
+      return;
+    }
+
+    Keyboard.dismiss();
+
     if (!steps.trim() || !calories.trim() || !water.trim()) {
       showMessage(
         'warning',
@@ -55,10 +67,23 @@ export default function AddRecordScreen() {
       return;
     }
 
+    const recordValues = {
+      steps: parseNonNegativeInteger(steps),
+      calories: parseNonNegativeInteger(calories),
+      water: parseNonNegativeInteger(water),
+    };
+
+    if (Object.values(recordValues).some((value) => value === null)) {
+      showMessage(
+        'warning',
+        'Invalid Information',
+        'Enter whole numbers using digits only. Values must be zero or greater.'
+      );
+      return;
+    }
+
     const record = {
-      steps: Number(steps),
-      calories: Number(calories),
-      water: Number(water),
+      ...recordValues,
       date: [
         today.getFullYear(),
         String(today.getMonth() + 1).padStart(2, '0'),
@@ -66,24 +91,11 @@ export default function AddRecordScreen() {
       ].join('-'),
     };
 
-    const values = [record.steps, record.calories, record.water];
-
-    // Only allow whole numbers that are zero or above.
-    if (
-      values.some(
-        (value) => !Number.isInteger(value) || value < 0
-      )
-    ) {
-      showMessage(
-        'warning',
-        'Invalid Information',
-        'Please enter whole numbers greater than or equal to zero.'
-      );
-      return;
-    }
+    setIsSaving(true);
 
     try {
-      await addHealthRecord(database, record);
+      // Save the record and get its automatically generated ID.
+      const recordId = await addHealthRecord(database, record);
 
       setSteps('');
       setCalories('');
@@ -92,7 +104,8 @@ export default function AddRecordScreen() {
       showMessage(
         'success',
         'Record Saved!',
-        'Your daily health record has been saved successfully.'
+        'Your daily health record has been saved successfully.',
+        { ...record, id: recordId }
       );
     } catch (error) {
       console.error('Error saving health record:', error);
@@ -102,6 +115,8 @@ export default function AddRecordScreen() {
         'Something Went Wrong',
         'Your health record could not be saved. Please try again.'
       );
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -109,21 +124,21 @@ export default function AddRecordScreen() {
   const messageDetails = {
     success: {
       icon: 'checkmark-circle',
-      color: '#26966B',
-      background: isDarkMode ? '#203B31' : '#E5F5EC',
-      button: '#26966B',
+      color: theme.success,
+      background: theme.successSoft,
+      button: theme.primaryButton,
     },
     warning: {
       icon: 'alert-circle',
-      color: '#D99A35',
-      background: isDarkMode ? '#403522' : '#FFF4DD',
-      button: '#C58A2B',
+      color: theme.warning,
+      background: theme.warningSoft,
+      button: theme.warningButton,
     },
     error: {
       icon: 'close-circle',
-      color: '#D94D56',
-      background: isDarkMode ? '#402629' : '#FCEBED',
-      button: '#D94D56',
+      color: theme.danger,
+      background: theme.dangerSoft,
+      button: theme.dangerButton,
     },
   };
 
@@ -133,13 +148,21 @@ export default function AddRecordScreen() {
 
   return (
     <>
+      <SafeAreaView style={styles.container} edges={['top']}>
       <KeyboardAvoidingView
-        style={styles.container}
+        style={styles.keyboardAvoidingView}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        <View style={styles.content}>
+        <ScrollView
+          style={styles.formScrollView}
+          contentContainerStyle={styles.content}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <Text style={styles.brand}>HEALTHMATE</Text>
+
           {/* Screen heading */}
-          <Text style={styles.title}>Add Record</Text>
+          <Text style={styles.title}>Add record</Text>
 
           <Text style={styles.subtitle}>
             Record your daily activities and keep track of your progress.
@@ -162,7 +185,10 @@ export default function AddRecordScreen() {
           </View>
 
           {/* Activity section */}
-          <Text style={styles.sectionTitle}>Daily Activities</Text>
+          <View style={styles.sectionHeading}>
+            <Text style={styles.sectionTitle}>Daily activities</Text>
+            <Text style={styles.requiredHint}>All fields required</Text>
+          </View>
 
           {/* Steps */}
           <View style={styles.inputCard}>
@@ -183,14 +209,19 @@ export default function AddRecordScreen() {
               </View>
             </View>
 
-            <TextInput
-              style={styles.input}
-              placeholder="Enter your steps"
-              placeholderTextColor={theme.secondaryText}
-              keyboardType="numeric"
-              value={steps}
-              onChangeText={setSteps}
-            />
+            <View style={styles.inputField}>
+              <TextInput
+                style={styles.input}
+                placeholder="0"
+                placeholderTextColor={theme.secondaryText}
+                keyboardType="numeric"
+                maxLength={16}
+                accessibilityLabel="Steps walked"
+                value={steps}
+                onChangeText={setSteps}
+              />
+              <Text style={styles.inputUnit}>steps</Text>
+            </View>
           </View>
 
           {/* Calories */}
@@ -200,7 +231,7 @@ export default function AddRecordScreen() {
                 <Ionicons
                   name="flame-outline"
                   size={22}
-                  color="#D94D56"
+                  color={theme.calories}
                 />
               </View>
 
@@ -212,14 +243,19 @@ export default function AddRecordScreen() {
               </View>
             </View>
 
-            <TextInput
-              style={styles.input}
-              placeholder="Enter calories burned"
-              placeholderTextColor={theme.secondaryText}
-              keyboardType="numeric"
-              value={calories}
-              onChangeText={setCalories}
-            />
+            <View style={styles.inputField}>
+              <TextInput
+                style={styles.input}
+                placeholder="0"
+                placeholderTextColor={theme.secondaryText}
+                keyboardType="numeric"
+                maxLength={16}
+                accessibilityLabel="Calories burned"
+                value={calories}
+                onChangeText={setCalories}
+              />
+              <Text style={styles.inputUnit}>kcal</Text>
+            </View>
           </View>
 
           {/* Water */}
@@ -229,7 +265,7 @@ export default function AddRecordScreen() {
                 <Ionicons
                   name="water-outline"
                   size={22}
-                  color="#278BCB"
+                  color={theme.water}
                 />
               </View>
 
@@ -241,30 +277,45 @@ export default function AddRecordScreen() {
               </View>
             </View>
 
-            <TextInput
-              style={styles.input}
-              placeholder="Enter water intake (ml)"
-              placeholderTextColor={theme.secondaryText}
-              keyboardType="numeric"
-              value={water}
-              onChangeText={setWater}
-            />
+            <View style={styles.inputField}>
+              <TextInput
+                style={styles.input}
+                placeholder="0"
+                placeholderTextColor={theme.secondaryText}
+                keyboardType="numeric"
+                maxLength={16}
+                accessibilityLabel="Water intake"
+                value={water}
+                onChangeText={setWater}
+              />
+              <Text style={styles.inputUnit}>ml</Text>
+            </View>
           </View>
 
           {/* Save record */}
           <TouchableOpacity
-            style={styles.saveButton}
+            style={[
+              styles.saveButton,
+              isSaving && styles.saveButtonDisabled,
+            ]}
             onPress={handleSave}
             activeOpacity={0.8}
+            disabled={isSaving}
+            accessibilityRole="button"
+            accessibilityLabel="Save health record"
           >
-            <Ionicons
-              name="checkmark-circle-outline"
-              size={21}
-              color="#FFFFFF"
-            />
+            {isSaving ? (
+              <ActivityIndicator color="#FFFFFF" />
+            ) : (
+              <Ionicons
+                name="checkmark-circle-outline"
+                size={21}
+                color="#FFFFFF"
+              />
+            )}
 
             <Text style={styles.saveButtonText}>
-              Save Health Record
+              {isSaving ? 'Saving...' : 'Save health record'}
             </Text>
           </TouchableOpacity>
 
@@ -272,8 +323,9 @@ export default function AddRecordScreen() {
           <Text style={styles.footerText}>
             Your health information is saved securely on your device.
           </Text>
-        </View>
+        </ScrollView>
       </KeyboardAvoidingView>
+      </SafeAreaView>
 
       {/* Custom message box */}
       <Modal
@@ -283,6 +335,11 @@ export default function AddRecordScreen() {
         onRequestClose={() => setMessage(null)}
       >
         <View style={styles.modalOverlay}>
+          <ScrollView
+            style={styles.messageScrollView}
+            contentContainerStyle={styles.messageScrollContent}
+            showsVerticalScrollIndicator={false}
+          >
           <View style={styles.messageCard}>
             {message && (
               <>
@@ -309,6 +366,59 @@ export default function AddRecordScreen() {
                   {message.text}
                 </Text>
 
+                {message.preview && (
+                  <View style={styles.previewCard}>
+                    <Text style={styles.previewDate}>
+                      {formattedDate}
+                    </Text>
+
+                    {/* Display the generated record ID */}
+                    <View style={styles.previewIdRow}>
+                      <Text style={styles.previewIdLabel}>
+                        Record ID
+                      </Text>
+                      <Text style={styles.previewIdValue}>
+                        #{message.preview.id}
+                      </Text>
+                    </View>
+
+                    {[
+                      {
+                        icon: 'footsteps-outline',
+                        label: 'Steps',
+                        value: message.preview.steps.toLocaleString(),
+                        color: theme.primary,
+                      },
+                      {
+                        icon: 'flame-outline',
+                        label: 'Calories',
+                        value: `${message.preview.calories.toLocaleString()} kcal`,
+                        color: theme.calories,
+                      },
+                      {
+                        icon: 'water-outline',
+                        label: 'Water',
+                        value: `${message.preview.water.toLocaleString()} ml`,
+                        color: theme.water,
+                      },
+                    ].map((item) => (
+                      <View key={item.label} style={styles.previewRow}>
+                        <Ionicons
+                          name={item.icon}
+                          size={18}
+                          color={item.color}
+                        />
+                        <Text style={styles.previewLabel}>
+                          {item.label}
+                        </Text>
+                        <Text style={styles.previewValue}>
+                          {item.value}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
+                )}
+
                 <Pressable
                   style={[
                     styles.messageButton,
@@ -325,6 +435,7 @@ export default function AddRecordScreen() {
               </>
             )}
           </View>
+          </ScrollView>
         </View>
       </Modal>
     </>
@@ -338,43 +449,62 @@ const createStyles = (theme, isDarkMode) =>
       backgroundColor: theme.background,
     },
 
-    content: {
+    keyboardAvoidingView: {
       flex: 1,
-      paddingHorizontal: 16,
-      paddingTop: 12,
-      paddingBottom: 8,
+    },
+
+    formScrollView: {
+      flex: 1,
+    },
+
+    content: {
+      flexGrow: 1,
+      width: '100%',
+      maxWidth: 600,
+      alignSelf: 'center',
+      paddingHorizontal: 20,
+      paddingTop: 16,
+      paddingBottom: 28,
+    },
+
+    brand: {
+      fontSize: 11,
+      fontWeight: 'bold',
+      letterSpacing: 1.8,
+      color: theme.primary,
+      marginBottom: 8,
     },
 
     title: {
-      fontSize: 24,
+      fontSize: 28,
       fontWeight: 'bold',
       color: theme.text,
     },
 
     subtitle: {
-      fontSize: 11,
+      fontSize: 14,
       color: theme.secondaryText,
-      lineHeight: 16,
-      marginTop: 3,
-      marginBottom: 14,
+      lineHeight: 21,
+      marginTop: 6,
+      marginBottom: 20,
     },
 
     dateCard: {
       flexDirection: 'row',
       alignItems: 'center',
       backgroundColor: theme.card,
-      borderRadius: 14,
-      padding: 11,
+      borderRadius: 16,
+      padding: 14,
       borderWidth: 1,
       borderColor: theme.border,
-      elevation: isDarkMode ? 0 : 2,
+      elevation: isDarkMode ? 0 : 1,
     },
 
     dateIcon: {
       width: 40,
       height: 40,
       borderRadius: 11,
-      backgroundColor: isDarkMode ? '#293B36' : '#E8F0E5',
+      backgroundColor: theme.primarySoft,
       justifyContent: 'center',
       alignItems: 'center',
     },
@@ -387,33 +517,44 @@ const createStyles = (theme, isDarkMode) =>
     dateLabel: {
       fontSize: 9,
       fontWeight: 'bold',
-      letterSpacing: 1,
+      letterSpacing: 1.2,
       color: theme.secondaryText,
     },
 
     dateValue: {
-      fontSize: 13,
+      fontSize: 14,
       fontWeight: '600',
       color: theme.text,
       marginTop: 4,
     },
 
+    sectionHeading: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginTop: 22,
+      marginBottom: 12,
+    },
+
     sectionTitle: {
-      fontSize: 16,
+      fontSize: 17,
       fontWeight: 'bold',
       color: theme.text,
-      marginTop: 16,
-      marginBottom: 9,
+    },
+
+    requiredHint: {
+      fontSize: 11,
+      color: theme.secondaryText,
     },
 
     inputCard: {
       backgroundColor: theme.card,
-      borderRadius: 14,
-      padding: 12,
-      marginBottom: 9,
+      borderRadius: 16,
+      padding: 14,
+      marginBottom: 12,
       borderWidth: 1,
       borderColor: theme.border,
-      elevation: isDarkMode ? 0 : 2,
+      elevation: isDarkMode ? 0 : 1,
     },
 
     inputHeader: {
@@ -423,28 +564,28 @@ const createStyles = (theme, isDarkMode) =>
     },
 
     stepsIcon: {
-      width: 38,
-      height: 38,
-      borderRadius: 11,
-      backgroundColor: isDarkMode ? '#293B36' : '#E8F0E5',
+      width: 42,
+      height: 42,
+      borderRadius: 13,
+      backgroundColor: theme.primarySoft,
       justifyContent: 'center',
       alignItems: 'center',
     },
 
     calorieIcon: {
-      width: 38,
-      height: 38,
-      borderRadius: 11,
-      backgroundColor: isDarkMode ? '#382629' : '#FCEBED',
+      width: 42,
+      height: 42,
+      borderRadius: 13,
+      backgroundColor: theme.caloriesSoft,
       justifyContent: 'center',
       alignItems: 'center',
     },
 
     waterIcon: {
-      width: 38,
-      height: 38,
-      borderRadius: 11,
-      backgroundColor: isDarkMode ? '#23323D' : '#E8F4FA',
+      width: 42,
+      height: 42,
+      borderRadius: 13,
+      backgroundColor: theme.waterSoft,
       justifyContent: 'center',
       alignItems: 'center',
     },
@@ -455,7 +596,7 @@ const createStyles = (theme, isDarkMode) =>
     },
 
     inputTitle: {
-      fontSize: 14,
+      fontSize: 15,
       fontWeight: 'bold',
       color: theme.text,
     },
@@ -466,75 +607,101 @@ const createStyles = (theme, isDarkMode) =>
       marginTop: 3,
     },
 
-    input: {
+    inputField: {
+      minHeight: 52,
+      flexDirection: 'row',
+      alignItems: 'center',
       backgroundColor: theme.input,
       borderWidth: 1,
       borderColor: theme.border,
-      borderRadius: 10,
-      paddingHorizontal: 12,
-      paddingVertical: 9,
-      fontSize: 14,
+      borderRadius: 12,
+      paddingHorizontal: 14,
+    },
+
+    input: {
+      flex: 1,
+      paddingVertical: 13,
+      fontSize: 16,
       color: theme.text,
     },
 
+    inputUnit: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: theme.secondaryText,
+      marginLeft: 10,
+    },
+
     saveButton: {
-      backgroundColor: isDarkMode ? '#287D70' : '#21664F',
+      backgroundColor: theme.primaryButton,
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
-      borderRadius: 12,
-      paddingVertical: 12,
-      marginTop: 5,
+      borderRadius: 14,
+      minHeight: 52,
+      paddingVertical: 14,
+      marginTop: 8,
       gap: 8,
+    },
+
+    saveButtonDisabled: {
+      opacity: 0.7,
     },
 
     saveButtonText: {
       color: '#FFFFFF',
-      fontSize: 14,
+      fontSize: 15,
       fontWeight: 'bold',
     },
 
     footerText: {
-      fontSize: 10,
+      fontSize: 12,
       color: theme.secondaryText,
       textAlign: 'center',
-      marginTop: 9,
-      lineHeight: 14,
+      marginTop: 12,
+      lineHeight: 18,
     },
 
     // Message modal styles
     modalOverlay: {
       flex: 1,
       backgroundColor: 'rgba(0, 0, 0, 0.55)',
+      paddingHorizontal: 20,
+    },
+
+    messageScrollContent: {
+      flexGrow: 1,
       justifyContent: 'center',
       alignItems: 'center',
-      paddingHorizontal: 25,
+      paddingVertical: 20,
+    },
+
+    messageScrollView: {
+      flex: 1,
     },
 
     messageCard: {
       width: '100%',
-      maxWidth: 350,
+      maxWidth: 400,
       backgroundColor: theme.card,
-      borderRadius: 22,
-      paddingHorizontal: 24,
-      paddingTop: 28,
-      paddingBottom: 24,
+      borderRadius: 20,
+      padding: 22,
       alignItems: 'center',
       borderWidth: 1,
       borderColor: theme.border,
     },
 
     messageIcon: {
-      width: 72,
-      height: 72,
-      borderRadius: 36,
+      width: 64,
+      height: 64,
+      borderRadius: 32,
       justifyContent: 'center',
       alignItems: 'center',
-      marginBottom: 17,
+      marginBottom: 14,
     },
 
     messageTitle: {
-      fontSize: 21,
+      fontSize: 20,
       fontWeight: 'bold',
       color: theme.text,
       textAlign: 'center',
@@ -546,13 +713,74 @@ const createStyles = (theme, isDarkMode) =>
       textAlign: 'center',
       lineHeight: 22,
       marginTop: 10,
-      marginBottom: 22,
+      marginBottom: 14,
+    },
+
+    previewCard: {
+      width: '100%',
+      backgroundColor: theme.input,
+      borderRadius: 14,
+      paddingHorizontal: 14,
+      paddingVertical: 11,
+      marginBottom: 20,
+      borderWidth: 1,
+      borderColor: theme.border,
+    },
+
+    previewDate: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: theme.secondaryText,
+      marginBottom: 9,
+    },
+
+    // Record ID styles
+    previewIdRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      paddingVertical: 9,
+      marginBottom: 5,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.border,
+    },
+
+    previewIdLabel: {
+      fontSize: 13,
+      fontWeight: '600',
+      color: theme.text,
+    },
+
+    previewIdValue: {
+      fontSize: 14,
+      fontWeight: 'bold',
+      color: theme.primary,
+    },
+
+    previewRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingVertical: 5,
+    },
+
+    previewLabel: {
+      flex: 1,
+      fontSize: 13,
+      color: theme.text,
+      marginLeft: 9,
+    },
+
+    previewValue: {
+      fontSize: 13,
+      fontWeight: 'bold',
+      color: theme.text,
     },
 
     messageButton: {
       width: '100%',
+      minHeight: 48,
       paddingVertical: 13,
-      borderRadius: 12,
+      borderRadius: 13,
       alignItems: 'center',
     },
 

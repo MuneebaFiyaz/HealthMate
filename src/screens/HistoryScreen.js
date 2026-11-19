@@ -9,11 +9,13 @@ import {
   StyleSheet,
   ScrollView,
   RefreshControl,
+  Keyboard,
 } from 'react-native';
 
 import { useSQLiteContext } from 'expo-sqlite';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import {
   getHealthRecords,
@@ -23,9 +25,10 @@ import {
 
 import { useTheme } from '../context/ThemeContext';
 import MessageModal from '../components/MessageModal';
+import { parseNonNegativeInteger } from '../utils/healthRecordValidation';
 
 const dateFilters = [
-  { label: 'All dates', value: 'all' },
+  { label: 'Show all', value: 'all' },
   { label: 'Last 7 days', value: 'week' },
   { label: 'This month', value: 'month' },
 ];
@@ -97,6 +100,7 @@ export default function HistoryScreen() {
   const [water, setWater] = useState('');
 
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isUpdating, setIsUpdating] = useState(false);
 
   const [modal, setModal] = useState({
     visible: false,
@@ -104,13 +108,15 @@ export default function HistoryScreen() {
     message: '',
     type: 'success',
     onConfirm: null,
+    preview: null,
   });
 
-  const showMessage = (
+  const showMessage = useCallback((
     title,
     message,
     type = 'success',
-    onConfirm = null
+    onConfirm = null,
+    preview = null
   ) => {
     setModal({
       visible: true,
@@ -118,21 +124,23 @@ export default function HistoryScreen() {
       message,
       type,
       onConfirm,
+      preview,
     });
-  };
+  }, []);
 
-  const closeMessage = () => {
+  const closeMessage = useCallback(() => {
     setModal({
       visible: false,
       title: '',
       message: '',
       type: 'success',
       onConfirm: null,
+      preview: null,
     });
-  };
+  }, []);
 
   // Load saved records from SQLite.
-  const loadRecords = async () => {
+  const loadRecords = useCallback(async () => {
     try {
       const savedRecords = await getHealthRecords(database);
       setRecords(savedRecords);
@@ -148,12 +156,12 @@ export default function HistoryScreen() {
 
       return false;
     }
-  };
+  }, [database, showMessage]);
 
   useFocusEffect(
     useCallback(() => {
       loadRecords();
-    }, [database])
+    }, [loadRecords])
   );
 
   const handleRefresh = async () => {
@@ -164,6 +172,7 @@ export default function HistoryScreen() {
 
   // Search for a record using YYYY-MM-DD.
   const handleSearch = () => {
+    Keyboard.dismiss();
     const date = searchDate.trim();
 
     if (!date) {
@@ -215,6 +224,11 @@ export default function HistoryScreen() {
 
   // Select a date filter.
   const handleFilterChange = (filter) => {
+    if (filter === 'all') {
+      clearSearch();
+      return;
+    }
+
     setActiveFilter(filter);
     setIsSearching(false);
     setSearchDate('');
@@ -282,6 +296,12 @@ export default function HistoryScreen() {
 
   // Update an existing record.
   const handleUpdate = async () => {
+    if (isUpdating) {
+      return;
+    }
+
+    Keyboard.dismiss();
+
     if (!steps.trim() || !calories.trim() || !water.trim()) {
       showMessage(
         'Missing Information',
@@ -292,29 +312,21 @@ export default function HistoryScreen() {
     }
 
     const updatedRecord = {
-      steps: Number(steps),
-      calories: Number(calories),
-      water: Number(water),
+      steps: parseNonNegativeInteger(steps),
+      calories: parseNonNegativeInteger(calories),
+      water: parseNonNegativeInteger(water),
     };
 
-    const values = [
-      updatedRecord.steps,
-      updatedRecord.calories,
-      updatedRecord.water,
-    ];
-
-    if (
-      values.some(
-        (value) => !Number.isInteger(value) || value < 0
-      )
-    ) {
+    if (Object.values(updatedRecord).some((value) => value === null)) {
       showMessage(
         'Invalid Information',
-        'Please enter valid whole numbers greater than or equal to zero.',
+        'Enter whole numbers using digits only. Values must be zero or greater.',
         'warning'
       );
       return;
     }
+
+    setIsUpdating(true);
 
     try {
       const originalRecord = records.find(
@@ -343,7 +355,18 @@ export default function HistoryScreen() {
         showMessage(
           'Record Updated!',
           'Your health record has been updated successfully.',
-          'success'
+          'success',
+          null,
+          {
+            id: originalRecord.id,
+            date: formatShortDate(originalRecord.date),
+            previous: {
+              steps: originalRecord.steps,
+              calories: originalRecord.calories,
+              water: originalRecord.water,
+            },
+            ...updatedRecord,
+          }
         );
       }
     } catch (error) {
@@ -354,11 +377,13 @@ export default function HistoryScreen() {
         'Could not update the health record. Please try again.',
         'error'
       );
+    } finally {
+      setIsUpdating(false);
     }
   };
 
   // Delete a record after confirmation.
-  const handleDelete = (id) => {
+  const handleDelete = (record) => {
     showMessage(
       'Delete Record?',
       'Are you sure you want to delete this health record? This action cannot be undone.',
@@ -367,9 +392,9 @@ export default function HistoryScreen() {
         closeMessage();
 
         try {
-          await deleteHealthRecord(database, id);
+          await deleteHealthRecord(database, record.id);
 
-          if (editingId === id) {
+          if (editingId === record.id) {
             cancelEdit();
           }
 
@@ -381,7 +406,14 @@ export default function HistoryScreen() {
             showMessage(
               'Record Deleted!',
               'The health record has been deleted successfully.',
-              'success'
+              'success',
+              null,
+              {
+                date: formatShortDate(record.date),
+                steps: record.steps,
+                calories: record.calories,
+                water: record.water,
+              }
             );
           }
         } catch (error) {
@@ -404,8 +436,9 @@ export default function HistoryScreen() {
       : 'Your records';
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       <ScrollView
+        style={styles.screenScrollView}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
@@ -438,7 +471,7 @@ export default function HistoryScreen() {
 
           <TextInput
             style={styles.searchInput}
-            placeholder="Search by date"
+            placeholder="YYYY-MM-DD"
             placeholderTextColor={theme.secondaryText}
             value={searchDate}
             onChangeText={setSearchDate}
@@ -446,17 +479,18 @@ export default function HistoryScreen() {
             maxLength={10}
             returnKeyType="search"
             onSubmitEditing={handleSearch}
+            accessibilityLabel="Search health records by date"
+            accessibilityHint="Enter a date in year, month, day format"
           />
 
           <TouchableOpacity
+            style={styles.searchButton}
             onPress={handleSearch}
             activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel="Search records"
           >
-            <Ionicons
-              name="calendar-outline"
-              size={21}
-              color={theme.secondaryText}
-            />
+            <Text style={styles.searchButtonText}>Search</Text>
           </TouchableOpacity>
         </View>
 
@@ -475,6 +509,8 @@ export default function HistoryScreen() {
                 ]}
                 onPress={() => handleFilterChange(filter.value)}
                 activeOpacity={0.8}
+                accessibilityRole="button"
+                accessibilityState={{ selected: isActive }}
               >
                 <Text
                   style={[
@@ -538,6 +574,9 @@ export default function HistoryScreen() {
                   onPress={() => handleRecordPress(record)}
                   activeOpacity={0.8}
                   disabled={isEditing}
+                  accessibilityRole="button"
+                  accessibilityState={{ expanded: isExpanded }}
+                  accessibilityLabel={`${formatRecordDate(record.date)} record`}
                 >
                   <View style={styles.dateContent}>
                     <Text style={styles.dateLabel}>
@@ -546,6 +585,11 @@ export default function HistoryScreen() {
 
                     <Text style={styles.dateText}>
                       {formatShortDate(record.date)}
+                    </Text>
+
+                    {/* Display record ID */}
+                    <Text style={styles.recordId}>
+                      Record ID: #{record.id}
                     </Text>
                   </View>
 
@@ -560,7 +604,7 @@ export default function HistoryScreen() {
                   />
                 </TouchableOpacity>
 
-                {/* Updated Edit form */}
+                {/* Edit form */}
                 {isEditing ? (
                   <View style={styles.editForm}>
                     <View style={styles.editHeading}>
@@ -568,7 +612,7 @@ export default function HistoryScreen() {
                         <Ionicons
                           name="create-outline"
                           size={22}
-                          color="#21664F"
+                          color={theme.primary}
                         />
                       </View>
 
@@ -579,6 +623,11 @@ export default function HistoryScreen() {
 
                         <Text style={styles.editSubtitle}>
                           Update your daily activity details
+                        </Text>
+
+                        {/* Display record ID in the edit form */}
+                        <Text style={styles.recordId}>
+                          Record ID: #{record.id}
                         </Text>
                       </View>
                     </View>
@@ -593,16 +642,19 @@ export default function HistoryScreen() {
                         <Ionicons
                           name="footsteps-outline"
                           size={20}
-                          color={isDarkMode ? '#8DC9AE' : '#267A58'}
+                          color={theme.primary}
                         />
 
                         <TextInput
                           style={styles.input}
                           keyboardType="numeric"
+                          maxLength={16}
+                          editable={!isUpdating}
                           value={steps}
                           onChangeText={setSteps}
-                          placeholder="Enter steps"
+                          placeholder="0"
                           placeholderTextColor={theme.secondaryText}
+                          accessibilityLabel="Steps walked"
                         />
                       </View>
                     </View>
@@ -617,16 +669,19 @@ export default function HistoryScreen() {
                         <Ionicons
                           name="flame-outline"
                           size={20}
-                          color="#D96A58"
+                          color={theme.calories}
                         />
 
                         <TextInput
                           style={styles.input}
                           keyboardType="numeric"
+                          maxLength={16}
+                          editable={!isUpdating}
                           value={calories}
                           onChangeText={setCalories}
-                          placeholder="Enter calories"
+                          placeholder="0"
                           placeholderTextColor={theme.secondaryText}
+                          accessibilityLabel="Calories burned"
                         />
 
                         <Text style={styles.inputUnit}>
@@ -645,16 +700,19 @@ export default function HistoryScreen() {
                         <Ionicons
                           name="water-outline"
                           size={20}
-                          color="#278BCB"
+                          color={theme.water}
                         />
 
                         <TextInput
                           style={styles.input}
                           keyboardType="numeric"
+                          maxLength={16}
+                          editable={!isUpdating}
                           value={water}
                           onChangeText={setWater}
-                          placeholder="Enter water intake"
+                          placeholder="0"
                           placeholderTextColor={theme.secondaryText}
+                          accessibilityLabel="Water intake"
                         />
 
                         <Text style={styles.inputUnit}>
@@ -669,6 +727,9 @@ export default function HistoryScreen() {
                         style={styles.saveButton}
                         onPress={handleUpdate}
                         activeOpacity={0.8}
+                        disabled={isUpdating}
+                        accessibilityRole="button"
+                        accessibilityLabel="Save record changes"
                       >
                         <Ionicons
                           name="checkmark-outline"
@@ -677,14 +738,19 @@ export default function HistoryScreen() {
                         />
 
                         <Text style={styles.actionText}>
-                          Save changes
+                          {isUpdating ? 'Saving...' : 'Save changes'}
                         </Text>
                       </TouchableOpacity>
 
                       <TouchableOpacity
-                        style={styles.cancelButton}
+                        style={[
+                          styles.cancelButton,
+                          isUpdating && styles.disabledButton,
+                        ]}
                         onPress={cancelEdit}
                         activeOpacity={0.8}
+                        disabled={isUpdating}
+                        accessibilityRole="button"
                       >
                         <Text style={styles.cancelText}>
                           Cancel
@@ -700,10 +766,10 @@ export default function HistoryScreen() {
                         <Ionicons
                           name="footsteps-outline"
                           size={20}
-                          color="#267A58"
+                          color={theme.primary}
                         />
 
-                        <Text style={styles.metricValue}>
+                        <Text style={styles.metricValue} numberOfLines={1}>
                           {record.steps.toLocaleString()}
                         </Text>
 
@@ -716,10 +782,10 @@ export default function HistoryScreen() {
                         <Ionicons
                           name="flame-outline"
                           size={20}
-                          color="#D94D56"
+                          color={theme.calories}
                         />
 
-                        <Text style={styles.metricValue}>
+                        <Text style={styles.metricValue} numberOfLines={1}>
                           {record.calories.toLocaleString()}
                         </Text>
 
@@ -732,10 +798,10 @@ export default function HistoryScreen() {
                         <Ionicons
                           name="water-outline"
                           size={20}
-                          color="#278BCB"
+                          color={theme.water}
                         />
 
-                        <Text style={styles.metricValue}>
+                        <Text style={styles.metricValue} numberOfLines={1}>
                           {record.water.toLocaleString()}
                         </Text>
 
@@ -765,7 +831,7 @@ export default function HistoryScreen() {
 
                         <TouchableOpacity
                           style={styles.deleteButton}
-                          onPress={() => handleDelete(record.id)}
+                          onPress={() => handleDelete(record)}
                         >
                           <Ionicons
                             name="trash-outline"
@@ -796,8 +862,9 @@ export default function HistoryScreen() {
         onClose={closeMessage}
         onConfirm={modal.onConfirm}
         confirmText="Delete"
+        preview={modal.preview}
       />
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -809,38 +876,45 @@ const createStyles = (theme, isDarkMode) =>
       backgroundColor: theme.background,
     },
 
+    screenScrollView: {
+      flex: 1,
+    },
+
     scrollContent: {
-      paddingHorizontal: 24,
-      paddingTop: 52,
-      paddingBottom: 25,
+      width: '100%',
+      maxWidth: 680,
+      alignSelf: 'center',
+      paddingHorizontal: 16,
+      paddingTop: 16,
+      paddingBottom: 32,
     },
 
     header: {
-      marginBottom: 22,
+      marginBottom: 20,
     },
 
     brand: {
       fontSize: 11,
       fontWeight: 'bold',
       letterSpacing: 2,
-      color: isDarkMode ? '#8DC9AE' : '#21664F',
+      color: theme.primary,
     },
 
     title: {
-      fontSize: 27,
+      fontSize: 28,
       fontWeight: 'bold',
       color: theme.text,
-      marginTop: 9,
+      marginTop: 7,
     },
 
     searchBar: {
-      height: 51,
+      minHeight: 54,
       flexDirection: 'row',
       alignItems: 'center',
       backgroundColor: theme.card,
       borderWidth: 1,
       borderColor: theme.border,
-      borderRadius: 15,
+      borderRadius: 16,
       paddingHorizontal: 15,
       marginBottom: 16,
       gap: 12,
@@ -848,33 +922,47 @@ const createStyles = (theme, isDarkMode) =>
 
     searchInput: {
       flex: 1,
-      fontSize: 14,
+      fontSize: 15,
       color: theme.text,
-      paddingVertical: 8,
+      paddingVertical: 10,
+    },
+
+    searchButton: {
+      minHeight: 44,
+      justifyContent: 'center',
+      backgroundColor: theme.primaryButton,
+      borderRadius: 11,
+      paddingHorizontal: 14,
+    },
+
+    searchButtonText: {
+      color: '#FFFFFF',
+      fontSize: 13,
+      fontWeight: '700',
     },
 
     filterRow: {
       flexDirection: 'row',
       gap: 8,
-      marginBottom: 23,
+      marginBottom: 22,
     },
 
     filterButton: {
       flex: 1,
-      height: 47,
-      borderRadius: 17,
-      backgroundColor: isDarkMode ? '#303A34' : '#E8EDE5',
+      minHeight: 44,
+      borderRadius: 14,
+      backgroundColor: theme.primarySoft,
       justifyContent: 'center',
       alignItems: 'center',
       paddingHorizontal: 5,
     },
 
     activeFilterButton: {
-      backgroundColor: theme.primary,
+      backgroundColor: theme.primaryButton,
     },
 
     filterText: {
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: '600',
       color: theme.secondaryText,
     },
@@ -898,17 +986,19 @@ const createStyles = (theme, isDarkMode) =>
     },
 
     recordCount: {
-      fontSize: 10,
+      fontSize: 11,
       color: theme.secondaryText,
       marginLeft: 8,
     },
 
     recordCard: {
       backgroundColor: theme.card,
-      borderRadius: 19,
+      borderRadius: 18,
       paddingHorizontal: 16,
-      paddingVertical: 13,
+      paddingVertical: 15,
       marginBottom: 12,
+      borderWidth: 1,
+      borderColor: theme.border,
       elevation: isDarkMode ? 0 : 1,
     },
 
@@ -917,6 +1007,7 @@ const createStyles = (theme, isDarkMode) =>
       alignItems: 'center',
       justifyContent: 'space-between',
       marginBottom: 13,
+      minHeight: 44,
     },
 
     dateContent: {
@@ -924,15 +1015,23 @@ const createStyles = (theme, isDarkMode) =>
     },
 
     dateLabel: {
-      fontSize: 14,
+      fontSize: 15,
       fontWeight: 'bold',
       color: theme.text,
     },
 
     dateText: {
-      fontSize: 11,
+      fontSize: 12,
       color: theme.secondaryText,
       marginTop: 3,
+    },
+
+    // Record ID style
+    recordId: {
+      fontSize: 11,
+      fontWeight: '600',
+      color: theme.primary,
+      marginTop: 5,
     },
 
     metricsRow: {
@@ -950,14 +1049,15 @@ const createStyles = (theme, isDarkMode) =>
     },
 
     metricValue: {
-      fontSize: 14,
+      flexShrink: 1,
+      fontSize: 13,
       fontWeight: 'bold',
       color: theme.text,
     },
 
     metricLabel: {
       width: '100%',
-      fontSize: 10,
+      fontSize: 11,
       color: theme.secondaryText,
       marginLeft: 25,
       marginTop: -1,
@@ -978,9 +1078,10 @@ const createStyles = (theme, isDarkMode) =>
       alignItems: 'center',
       justifyContent: 'center',
       gap: 6,
-      backgroundColor: theme.primary,
-      paddingVertical: 11,
-      borderRadius: 10,
+      backgroundColor: theme.primaryButton,
+      minHeight: 44,
+      paddingVertical: 10,
+      borderRadius: 12,
     },
 
     deleteButton: {
@@ -989,9 +1090,10 @@ const createStyles = (theme, isDarkMode) =>
       alignItems: 'center',
       justifyContent: 'center',
       gap: 6,
-      backgroundColor: '#D9534F',
-      paddingVertical: 11,
-      borderRadius: 10,
+      backgroundColor: theme.dangerButton,
+      minHeight: 44,
+      paddingVertical: 10,
+      borderRadius: 12,
     },
 
     actionText: {
@@ -1000,12 +1102,12 @@ const createStyles = (theme, isDarkMode) =>
       fontWeight: 'bold',
     },
 
-    // Updated Edit Record form styles
+    // Edit Record form styles
     editForm: {
-      backgroundColor: isDarkMode ? theme.card : '#F5F7F2',
-      borderRadius: 17,
+      backgroundColor: isDarkMode ? theme.card : theme.background,
+      borderRadius: 16,
       borderWidth: 1,
-      borderColor: isDarkMode ? theme.border : '#DCE5D9',
+      borderColor: theme.border,
       padding: 16,
       marginTop: 4,
     },
@@ -1020,7 +1122,7 @@ const createStyles = (theme, isDarkMode) =>
       width: 43,
       height: 43,
       borderRadius: 13,
-      backgroundColor: isDarkMode ? '#34483C' : '#E2EBDF',
+      backgroundColor: theme.primarySoft,
       justifyContent: 'center',
       alignItems: 'center',
     },
@@ -1054,20 +1156,20 @@ const createStyles = (theme, isDarkMode) =>
     },
 
     inputContainer: {
-      minHeight: 49,
+      minHeight: 50,
       flexDirection: 'row',
       alignItems: 'center',
       backgroundColor: theme.input,
       borderWidth: 1,
       borderColor: theme.border,
-      borderRadius: 11,
+      borderRadius: 12,
       paddingHorizontal: 13,
       gap: 10,
     },
 
     input: {
       flex: 1,
-      fontSize: 14,
+      fontSize: 15,
       color: theme.text,
       paddingVertical: 11,
     },
@@ -1086,24 +1188,28 @@ const createStyles = (theme, isDarkMode) =>
 
     saveButton: {
       flex: 1.4,
-      minHeight: 46,
+      minHeight: 48,
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
       gap: 7,
-      backgroundColor: theme.primary,
+      backgroundColor: theme.primaryButton,
       borderRadius: 11,
       paddingHorizontal: 8,
     },
 
     cancelButton: {
       flex: 1,
-      minHeight: 46,
+      minHeight: 48,
       alignItems: 'center',
       justifyContent: 'center',
-      backgroundColor: isDarkMode ? '#424B45' : '#E3E8E0',
-      borderRadius: 11,
+      backgroundColor: theme.primarySoft,
+      borderRadius: 12,
       paddingHorizontal: 8,
+    },
+
+    disabledButton: {
+      opacity: 0.6,
     },
 
     cancelText: {
@@ -1118,6 +1224,8 @@ const createStyles = (theme, isDarkMode) =>
       borderRadius: 18,
       alignItems: 'center',
       marginTop: 5,
+      borderWidth: 1,
+      borderColor: theme.border,
     },
 
     emptyTitle: {

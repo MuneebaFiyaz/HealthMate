@@ -7,6 +7,7 @@ import {
   ScrollView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useTheme } from '../context/ThemeContext';
 
@@ -16,15 +17,17 @@ export default function SettingsScreen() {
   const styles = createStyles(theme, isDarkMode);
 
   return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={styles.scrollContent}
-      showsVerticalScrollIndicator={false}
-    >
+    <SafeAreaView style={styles.container} edges={['top']}>
+      <ScrollView
+        style={styles.screenScrollView}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
       {/* Screen heading */}
+      <Text style={styles.brand}>HEALTHMATE</Text>
       <Text style={styles.title}>Settings</Text>
       <Text style={styles.subtitle}>
-        Manage your HealthMate preferences.
+        Make HealthMate feel right for you.
       </Text>
 
       {/* Appearance section */}
@@ -43,7 +46,10 @@ export default function SettingsScreen() {
           <View style={styles.settingText}>
             <Text style={styles.settingTitle}>Dark Mode</Text>
             <Text style={styles.settingDescription}>
-              Change the appearance of HealthMate.
+              Use the appearance that feels comfortable.
+            </Text>
+            <Text style={styles.settingValue}>
+              {isDarkMode ? 'Dark mode is on' : 'Light mode is on'}
             </Text>
           </View>
         </View>
@@ -56,6 +62,8 @@ export default function SettingsScreen() {
             true: theme.primary,
           }}
           thumbColor="#FFFFFF"
+          accessibilityLabel="Dark mode"
+          accessibilityHint="Switch between light and dark appearance"
         />
       </View>
 
@@ -65,7 +73,7 @@ export default function SettingsScreen() {
       <View style={styles.infoCard}>
         <View style={styles.aboutHeader}>
           <View style={styles.appIcon}>
-            <Text style={styles.appIconText}>H</Text>
+            <Ionicons name="heart" size={24} color="#FFFFFF" />
           </View>
 
           <View style={styles.appInfo}>
@@ -95,7 +103,8 @@ export default function SettingsScreen() {
           HealthMate - Your daily wellness companion
         </Text>
       </View>
-    </ScrollView>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
@@ -104,24 +113,38 @@ const createStyles = (theme, isDarkMode) => StyleSheet.create({
     flex: 1,
     backgroundColor: theme.background,
   },
+  screenScrollView: {
+    flex: 1,
+  },
   scrollContent: {
-    paddingHorizontal: 18,
-    paddingTop: 35,
-    paddingBottom: 30,
+    width: '100%',
+    maxWidth: 600,
+    alignSelf: 'center',
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 32,
+  },
+  brand: {
+    fontSize: 11,
+    fontWeight: 'bold',
+    letterSpacing: 1.8,
+    color: theme.primary,
+    marginBottom: 8,
   },
   title: {
-    fontSize: 27,
+    fontSize: 28,
     fontWeight: 'bold',
     color: theme.text,
   },
   subtitle: {
-    fontSize: 13,
+    fontSize: 14,
     color: theme.secondaryText,
+    lineHeight: 20,
     marginTop: 6,
-    marginBottom: 28,
+    marginBottom: 24,
   },
   sectionTitle: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: 'bold',
     color: theme.text,
     marginBottom: 12,
@@ -134,7 +157,7 @@ const createStyles = (theme, isDarkMode) => StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 25,
+    marginBottom: 24,
     borderWidth: 1,
     borderColor: theme.border,
     elevation: isDarkMode ? 0 : 2,
@@ -149,7 +172,7 @@ const createStyles = (theme, isDarkMode) => StyleSheet.create({
     width: 42,
     height: 42,
     borderRadius: 13,
-    backgroundColor: isDarkMode ? '#293B36' : '#E8F0E5',
+    backgroundColor: theme.primarySoft,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
@@ -167,6 +190,12 @@ const createStyles = (theme, isDarkMode) => StyleSheet.create({
     color: theme.secondaryText,
     marginTop: 4,
   },
+  settingValue: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: theme.primary,
+    marginTop: 6,
+  },
   infoCard: {
     backgroundColor: theme.card,
     padding: 17,
@@ -183,15 +212,10 @@ const createStyles = (theme, isDarkMode) => StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 14,
-    backgroundColor: theme.primary,
+    backgroundColor: theme.primaryButton,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 13,
-  },
-  appIconText: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
   },
   appInfo: {
     flex: 1,

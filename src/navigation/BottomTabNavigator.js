@@ -22,17 +22,20 @@ export default function BottomTabNavigator() {
         tabBarInactiveTintColor: theme.secondaryText,
 
         tabBarStyle: {
-          height: 65,
-          paddingTop: 5,
-          paddingBottom: 5,
+          paddingTop: 6,
+          paddingBottom: 6,
           backgroundColor: theme.tabBar,
           borderTopColor: theme.border,
           borderTopWidth: 1,
-          elevation: 8,
+          elevation: 4,
+        },
+
+        tabBarItemStyle: {
+          minHeight: 48,
         },
 
         tabBarLabelStyle: {
-          fontSize: 12,
+          fontSize: 11,
           fontWeight: '600',
         },
       }}
@@ -41,8 +44,13 @@ export default function BottomTabNavigator() {
         name="Home"
         component={HomeScreen}
         options={{
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="home" size={size} color={color} />
+          tabBarAccessibilityLabel: 'Home dashboard',
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons
+              name={focused ? 'home' : 'home-outline'}
+              size={size}
+              color={color}
+            />
           ),
         }}
       />
@@ -51,8 +59,13 @@ export default function BottomTabNavigator() {
         name="Add"
         component={AddRecordScreen}
         options={{
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="add-circle" size={size} color={color} />
+          tabBarAccessibilityLabel: 'Add health record',
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons
+              name={focused ? 'add-circle' : 'add-circle-outline'}
+              size={size}
+              color={color}
+            />
           ),
         }}
       />
@@ -61,8 +74,13 @@ export default function BottomTabNavigator() {
         name="History"
         component={HistoryScreen}
         options={{
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="calendar" size={size} color={color} />
+          tabBarAccessibilityLabel: 'Health record history',
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons
+              name={focused ? 'calendar' : 'calendar-outline'}
+              size={size}
+              color={color}
+            />
           ),
         }}
       />
@@ -71,8 +89,13 @@ export default function BottomTabNavigator() {
         name="Settings"
         component={SettingsScreen}
         options={{
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="settings" size={size} color={color} />
+          tabBarAccessibilityLabel: 'Settings',
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons
+              name={focused ? 'settings' : 'settings-outline'}
+              size={size}
+              color={color}
+            />
           ),
         }}
       />
